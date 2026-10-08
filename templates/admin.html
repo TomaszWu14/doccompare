@@ -1,0 +1,862 @@
+{% extends "base.html" %}
+{% block title %}Admin — DocCompare{% endblock %}
+{% block extra_head %}
+<style>
+  h1{font-size:20px;font-weight:500;margin-bottom:5px}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:26px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:30px}
+  .scard{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+  .slbl{font-size:11px;color:var(--muted);font-family:var(--mono);letter-spacing:1px;margin-bottom:6px}
+  .sval{font-size:26px;font-weight:500;font-family:var(--mono)}
+  .verr{color:var(--error)}.vwarn{color:var(--warn)}
+  .sec{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:0 0 12px;font-family:var(--mono)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:28px}
+  th{text-align:left;padding:8px 12px;font-size:11px;font-family:var(--mono);letter-spacing:1px;
+    color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface)}
+  td{padding:9px 12px;border-bottom:1px solid rgba(42,45,58,.5);vertical-align:middle}
+  .mono{font-family:var(--mono);font-size:12px}
+  .bdel{background:none;border:1px solid rgba(255,92,92,.3);color:var(--error);border-radius:6px;
+    padding:4px 9px;cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .15s}
+  .bdel:hover{background:rgba(255,92,92,.1)}
+  .bedit{background:none;border:1px solid rgba(255,179,71,.3);color:#ffb347;border-radius:6px;
+    padding:4px 9px;cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .15s}
+  .bedit:hover{background:rgba(255,179,71,.1)}
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center}
+  .modal-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:340px;max-width:480px;width:90%}
+  .modal-title{font-size:15px;font-weight:500;margin-bottom:18px}
+  .modal-box .ff{margin-bottom:14px}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+  .form{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:18px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .ff{display:flex;flex-direction:column;gap:5px}
+  .ff label{font-size:11px;color:var(--muted);font-family:var(--mono);letter-spacing:1px}
+  .ff input,.ff select{background:var(--bg);border:1px solid var(--border);border-radius:6px;
+    padding:8px 11px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;
+    transition:border-color .2s;min-width:150px}
+  .ff input:focus,.ff select:focus{border-color:var(--accent)}
+  .badd{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 18px;
+    font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .badd:hover{opacity:.85}
+  .msg{font-size:13px;margin-top:8px}
+  .mok{color:var(--ok)}.merr{color:var(--error)}
+  .role-select{background:var(--bg);border:1px solid var(--border);border-radius:6px;
+    padding:4px 8px;color:var(--text);font-family:var(--mono);font-size:12px;cursor:pointer;outline:none}
+  .role-select:focus{border-color:var(--accent)}
+  .mod-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;
+    font-size:11px;font-family:var(--mono);border:1px solid var(--border);cursor:pointer;
+    background:var(--surface2);transition:all .12s;user-select:none}
+  .mod-chip.active{background:rgba(99,102,241,.15);border-color:rgba(99,102,241,.5);color:#818cf8}
+  .role-mod-row td{padding:10px 12px;vertical-align:top}
+</style>
+{% endblock %}
+{% block page_title %}Panel administracyjny{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Panel administracyjny</h1>
+  <p class="sub">Zarządzanie użytkownikami i statystyki.</p>
+</div>
+
+<div class="stats">
+  <div class="scard"><div class="slbl">ŁĄCZNIE PORÓWNAŃ</div><div class="sval">{{ stats.total or 0 }}</div></div>
+  <div class="scard"><div class="slbl">Z BŁĘDAMI</div><div class="sval verr">{{ stats.errors or 0 }}</div></div>
+  <div class="scard"><div class="slbl">Z OSTRZEŻENIAMI</div><div class="sval vwarn">{{ stats.warnings or 0 }}</div></div>
+</div>
+
+
+<style>
+  .adm-tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:2px solid var(--border);margin:10px 0 22px}
+  .adm-tab{appearance:none;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;padding:10px 18px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;border-radius:8px 8px 0 0}
+  .adm-tab:hover{color:var(--text);background:var(--surface2,rgba(127,127,127,.06))}
+  .adm-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .adm-pane{display:none}
+  .adm-pane.active{display:block;animation:admFade .15s ease}
+  @keyframes admFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+</style>
+<div class="adm-tabs" role="tablist">
+  <button type="button" class="adm-tab active" data-pane="users" onclick="admTab('users')" role="tab">👤 Użytkownicy</button>
+  <button type="button" class="adm-tab" data-pane="api" onclick="admTab('api')" role="tab">💰 Użycie i koszty Claude API</button>
+  <button type="button" class="adm-tab" data-pane="system" onclick="admTab('system')" role="tab">⚙️ Status systemu</button>
+  <button type="button" class="adm-tab" data-pane="aiconfig" onclick="admTab('aiconfig')" role="tab">🤖 Konfiguracja AI</button>
+  <button type="button" class="adm-tab" data-pane="database" onclick="admTab('database')" role="tab">💾 Baza danych</button>
+</div>
+
+<div class="adm-pane active" id="pane-users">
+<div class="sec">Użytkownicy</div>
+<table>
+  <thead><tr>
+    <th scope="col">#</th>
+    <th scope="col">Login</th>
+    <th scope="col">Email</th>
+    <th scope="col">Rola</th>
+    <th scope="col">Dział</th>
+    <th scope="col">Moduły</th>
+    <th scope="col">Ostatnie logowanie</th>
+    <th scope="col">Akcje</th>
+  </tr></thead>
+  <tbody id="utbl">
+    {% if not users %}
+    <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">Brak użytkowników</td></tr>
+    {% endif %}
+    {% for u in users %}
+    <tr id="r{{ u.id }}">
+      <td class="mono">{{ u.id }}</td>
+      <td id="uname{{ u.id }}"><strong>{{ u.username }}</strong></td>
+      <td class="mono" id="uemail{{ u.id }}" style="font-size:12px;color:var(--muted)">{{ u.email or '—' }}</td>
+      <td>
+        {% if u.username == 'admin' or u.id == session.get('user_id') %}
+          <span class="badge role-{{ u.role }}">{{ u.role }}</span>
+        {% else %}
+          <select class="role-select" onchange="changeRole({{ u.id }}, this)"
+            aria-label="Zmień rolę {{ u.username }}">
+            {% for role in ['user','manager','superuser','admin','forwarder','customs_agent'] %}
+            <option value="{{ role }}" {% if u.role == role %}selected{% endif %}>{{ role }}</option>
+            {% endfor %}
+          </select>
+        {% endif %}
+      </td>
+      <td style="font-size:12px;color:var(--muted)">{{ u.get('department','') or '—' }}</td>
+      <td style="font-size:11px;color:var(--muted)">
+        {% if u.get('allowed_modules') %}
+          {{ u.allowed_modules }}
+        {% else %}
+          <span style="color:var(--ok)">Wszystkie</span>
+        {% endif %}
+      </td>
+      <td class="mono" style="font-size:12px;color:var(--muted)">{{ (u.last_login|string)[:16] if u.last_login else 'nigdy' }}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap">
+        <button type="button" class="bedit"
+          onclick='editUser({{ u.id }},{{ u.username|tojson }},{{ (u.email or "")|tojson }})'>Edytuj</button>
+        <button type="button" class="bedit" style="border-color:rgba(99,102,241,.3);color:#6366f1"
+          onclick='editModules({{ u.id }},{{ u.username|tojson }},{{ (u.get("department","") or "")|tojson }},{{ (u.get("allowed_modules","") or "")|tojson }},{{ u.role|tojson }})'>Moduły</button>
+        {% if u.username != 'admin' %}
+        <button type="button" class="bdel" onclick='del({{ u.id }},{{ u.username|tojson }})'>Usuń</button>
+        {% endif %}
+        <button type="button" class="bdel" style="border-color:rgba(91,155,255,.3);color:var(--accent)"
+          onclick='genReset({{ u.id }},{{ u.username|tojson }},{{ (u.email or "")|tojson }})'>Reset hasła</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Modules modal -->
+<div id="modalsModules" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center" role="dialog" aria-modal="true" aria-labelledby="modalsModulesTitle">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;width:500px;max-width:95vw;display:flex;flex-direction:column;gap:14px">
+    <div id="modalsModulesTitle" style="font-size:16px;font-weight:800;color:var(--text)">Moduły — <span id="modUser"></span></div>
+    <input type="hidden" id="modUid">
+    <input type="hidden" id="modUserRole">
+    <div>
+      <label for="modDept" style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px">Dział</label>
+      <select id="modDept" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px">
+        <option value="">— brak —</option>
+        <option value="Zakupy">Zakupy</option>
+        <option value="Logistyka">Logistyka</option>
+        <option value="Magazyn">Magazyn</option>
+        <option value="Finanse">Finanse</option>
+        <option value="IT">IT</option>
+        <option value="Zarząd">Zarząd</option>
+      </select>
+    </div>
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Dozwolone moduły</label>
+        <button type="button" onclick="applyRoleDefaults()" id="applyDefaultsBtn"
+          style="font-size:11px;color:#6366f1;background:none;border:1px solid rgba(99,102,241,.4);border-radius:6px;padding:3px 9px;cursor:pointer">
+          ↩ Domyślne roli
+        </button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px" id="modCheckboxes">
+        {% for m in ['zakupy','transport','spedycja','magazyn','artwork','dane_ref','admin'] %}
+        <label class="mod-chip" id="chip_{{ m }}">
+          <input type="checkbox" name="mod" value="{{ m }}" style="display:none" onchange="updateChip('{{ m }}')"> {{ m }}
+        </label>
+        {% endfor %}
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:7px">Brak zaznaczenia = dostęp do wszystkich modułów.</div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button type="button" onclick="document.getElementById('modalsModules').style.display='none'"
+        style="padding:9px 20px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);cursor:pointer">Anuluj</button>
+      <button type="button" onclick="saveModules()"
+        style="padding:9px 20px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">Zapisz</button>
+    </div>
+  </div>
+</div>
+
+<div class="sec">Dodaj użytkownika</div>
+<div class="form">
+  <div class="ff"><label for="nu">LOGIN</label><input type="text" id="nu" placeholder="jan.kowalski" autocomplete="username"></div>
+  <div class="ff"><label for="ne">EMAIL</label><input type="email" id="ne" placeholder="jan@example.com" autocomplete="email"></div>
+  <div class="ff"><label for="np">HASŁO</label><input type="password" id="np" placeholder="min. 8 znaków" autocomplete="new-password"></div>
+  <div class="ff"><label for="nr">ROLA</label>
+    <select id="nr" onchange="toggleForwarderField()">
+      <option value="user">user</option>
+      <option value="manager">manager</option>
+      <option value="superuser">superuser</option>
+      <option value="admin">admin</option>
+      <option value="forwarder">forwarder (spedytor zewn.)</option>
+      <option value="customs_agent">customs_agent (agencja celna)</option>
+    </select>
+  </div>
+  <div class="ff" id="forwarderField" style="display:none"><label for="nfwd">FIRMA SPEDYCYJNA</label>
+    <select id="nfwd"><option value="">— wybierz —</option></select>
+  </div>
+  <div class="ff" id="agencyField" style="display:none"><label for="nagc">AGENCJA CELNA</label>
+    <select id="nagc"><option value="">— wybierz —</option></select>
+  </div>
+  <button type="button" class="badd" onclick="addU()">+ Dodaj</button>
+</div>
+<div class="msg" id="amsg"></div>
+
+<!-- Role → Modules defaults section -->
+<div class="sec" style="margin-top:30px">Domyślne moduły według roli</div>
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:24px">
+  <p style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+    Konfiguracja jakie moduły są przypisywane domyślnie gdy użytkownik ma daną rolę.
+    Użyj przycisku <strong style="color:#6366f1">↩ Domyślne roli</strong> w oknie modułów, aby zastosować te ustawienia do konkretnego użytkownika.
+    Puste = brak ograniczeń (dostęp do wszystkich).
+  </p>
+  <div id="roleModGrid" style="display:flex;flex-direction:column;gap:10px">
+    <div style="color:var(--muted);font-size:12px">Ładowanie…</div>
+  </div>
+  <div style="margin-top:14px;display:flex;gap:10px;align-items:center">
+    <button type="button" class="badd" onclick="saveRoleModules()" style="font-size:12px;padding:8px 16px">💾 Zapisz konfigurację</button>
+    <span id="roleModMsg" style="font-size:12px"></span>
+  </div>
+</div>
+
+<div class="sec" style="margin-top:28px">Oczekujące linki reset hasła</div>
+{% if reset_tokens %}
+<table>
+  <thead><tr><th scope="col">Użytkownik</th><th scope="col">Email</th><th scope="col">Wygasa</th><th scope="col">Link</th></tr></thead>
+  <tbody>
+    {% for t in reset_tokens %}
+    <tr>
+      <td><strong>{{ t.username }}</strong></td>
+      <td class="mono" style="font-size:12px;color:var(--muted)">{{ t.email or '—' }}</td>
+      <td class="mono" style="font-size:12px;color:var(--muted)">{{ t.expires_at[:16] }}</td>
+      <td>
+        <button type="button" class="bdel" style="border-color:rgba(91,155,255,.3);color:var(--accent);font-size:11px"
+          onclick='copyLink({{ t.token|tojson }})'>Kopiuj link</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+</div><!-- /pane-users -->
+
+<div class="adm-pane" id="pane-api">
+<!-- ── SEKCJA: UŻYCIE API ── -->
+<div class="sec">Użycie i koszty Claude API</div>
+{% if api_usage %}
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+  <div class="scard"><div class="slbl">ŁĄCZNY KOSZT</div><div class="sval" style="color:#7c3aed">${{ '%.4f'|format(api_usage.total_cost) }}</div></div>
+  <div class="scard"><div class="slbl">WYWOŁANIA API</div><div class="sval">{{ api_usage.total_calls }}</div></div>
+  <div class="scard"><div class="slbl">TOKENY WEJŚCIE</div><div class="sval" style="font-size:18px">{{ '{:,}'.format(api_usage.total_input|default(0)|int).replace(',', ' ') }}</div></div>
+  <div class="scard"><div class="slbl">TOKENY WYJŚCIE</div><div class="sval" style="font-size:18px">{{ '{:,}'.format(api_usage.total_output|default(0)|int).replace(',', ' ') }}</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+  <div class="form" style="flex-direction:column;gap:0;padding:14px 16px">
+    <div style="font-size:11px;font-family:var(--mono);letter-spacing:1px;color:var(--muted);margin-bottom:10px">WEDŁUG MODELU</div>
+    {% if api_usage.by_model %}
+    <table style="margin:0;font-size:12px">
+      <thead><tr><th scope="col">Model</th><th scope="col" style="text-align:right">Wywołania</th><th scope="col" style="text-align:right">Tokeny</th><th scope="col" style="text-align:right">Koszt USD</th></tr></thead>
+      <tbody>
+      {% for m in api_usage.by_model %}
+      <tr>
+        <td class="mono">{{ m.model }}</td>
+        <td class="mono" style="text-align:right">{{ m.calls }}</td>
+        <td class="mono" style="text-align:right">{{ '{:,}'.format((m.input_tokens+m.output_tokens)|int).replace(',', ' ') }}</td>
+        <td class="mono" style="text-align:right;color:#7c3aed;font-weight:600">${{ '%.4f'|format(m.cost_usd) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div style="color:var(--muted);font-size:12px">Brak danych</div>{% endif %}
+  </div>
+
+  <div class="form" style="flex-direction:column;gap:0;padding:14px 16px">
+    <div style="font-size:11px;font-family:var(--mono);letter-spacing:1px;color:var(--muted);margin-bottom:10px">WEDŁUG TYPU WYWOŁANIA</div>
+    {% if api_usage.by_type %}
+    <table style="margin:0;font-size:12px">
+      <thead><tr><th scope="col">Typ</th><th scope="col" style="text-align:right">Wywołania</th><th scope="col" style="text-align:right">Koszt USD</th></tr></thead>
+      <tbody>
+      {% for t in api_usage.by_type %}
+      <tr>
+        <td class="mono">{{ t.call_type }}</td>
+        <td class="mono" style="text-align:right">{{ t.calls }}</td>
+        <td class="mono" style="text-align:right;color:#7c3aed;font-weight:600">${{ '%.4f'|format(t.cost_usd) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div style="color:var(--muted);font-size:12px">Brak danych</div>{% endif %}
+  </div>
+</div>
+
+{% if api_usage.recent %}
+<div class="form" style="flex-direction:column;gap:0;padding:14px 16px;margin-bottom:16px">
+  <div style="font-size:11px;font-family:var(--mono);letter-spacing:1px;color:var(--muted);margin-bottom:10px">OSTATNIE 50 WYWOŁAŃ</div>
+  <div style="max-height:260px;overflow-y:auto">
+  <table style="margin:0;font-size:11px">
+    <thead><tr>
+      <th scope="col">Data</th><th scope="col">Użytkownik</th><th scope="col">Model</th><th scope="col">Typ</th>
+      <th scope="col" style="text-align:right">In</th><th scope="col" style="text-align:right">Out</th><th scope="col" style="text-align:right">Koszt</th>
+    </tr></thead>
+    <tbody>
+    {% for r in api_usage.recent %}
+    <tr>
+      <td class="mono" style="white-space:nowrap">{{ (r.created_at|string)[:16] if r.created_at else '—' }}</td>
+      <td>{{ r.username or '—' }}</td>
+      <td class="mono" style="font-size:10px">{{ r.model.split('-')[1] if r.model and '-' in r.model else (r.model or '?') }}</td>
+      <td class="mono" style="font-size:10px;color:var(--muted)">{{ r.call_type }}</td>
+      <td class="mono" style="text-align:right">{{ r.input_tokens }}</td>
+      <td class="mono" style="text-align:right">{{ r.output_tokens }}</td>
+      <td class="mono" style="text-align:right;color:#7c3aed">${{ '%.5f'|format(r.cost_usd) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+</div><!-- /pane-api -->
+
+<div class="adm-pane" id="pane-system">
+<div class="sec">Status systemu i zależności</div>
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:24px">
+  <div id="sysStatusWrap"><span style="color:var(--muted);font-size:12px">Ładowanie…</span></div>
+</div>
+
+<div class="sec" style="margin-top:30px">Zarządzanie modułami</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">
+  <a href="/artwork/admin" style="text-decoration:none;display:block;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;transition:border-color .15s">
+    <div style="font-size:22px;margin-bottom:8px">🖼️</div>
+    <div style="font-weight:700;font-size:13px;color:var(--text)">Artwork admin</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:3px">Użytkownicy, ostatnie analizy artwork</div>
+  </a>
+  <a href="/templates" style="text-decoration:none;display:block;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;transition:border-color .15s">
+    <div style="font-size:22px;margin-bottom:8px">📋</div>
+    <div style="font-weight:700;font-size:13px;color:var(--text)">Szablony porównań</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:3px">Twórz i zarządzaj szablonami</div>
+  </a>
+  <a href="/api-costs" style="text-decoration:none;display:block;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;transition:border-color .15s">
+    <div style="font-size:22px;margin-bottom:8px">💰</div>
+    <div style="font-weight:700;font-size:13px;color:var(--text)">Koszty Claude API</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:3px">Analiza kosztów i wywołań AI</div>
+  </a>
+</div>
+</div><!-- /pane-system -->
+
+<div class="adm-pane" id="pane-aiconfig">
+<div class="sec">Konfiguracja AI (Claude API)</div>
+<div class="form" style="flex-direction:column;align-items:stretch;gap:10px">
+  <div style="font-size:13px;color:var(--muted);line-height:1.6">
+    Klucz API do analizy AI artworków i porównań dokumentów. Uzyskaj na <strong style="color:var(--text)">console.anthropic.com</strong>.
+  </div>
+  <div id="aiStatus" style="font-size:12px;font-family:var(--mono);color:var(--muted)">Sprawdzanie...</div>
+  <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <div class="ff" style="flex:1;min-width:280px">
+      <label for="aiKey">KLUCZ ANTHROPIC API</label>
+      <input type="password" id="aiKey" placeholder="sk-ant-api03-..." style="font-family:var(--mono)">
+    </div>
+    <button type="button" class="badd" onclick="saveAiKey()">💾 Zapisz klucz</button>
+  </div>
+  <div class="msg" id="aiMsg"></div>
+</div>
+</div><!-- /pane-aiconfig -->
+
+<div class="adm-pane" id="pane-database" x-data="dbUsage()" x-init="load()">
+  <h2 style="font-size:15px;font-weight:800;margin:0 0 10px">💾 Baza danych — zużycie</h2>
+  <div class="stats">
+    <div class="scard"><div class="slbl">ROZMIAR BAZY (<span x-text="d.engine||'…'"></span>)</div>
+      <div class="sval" x-text="d.db_pretty || '…'"></div></div>
+    <div class="scard"><div class="slbl">MASTERY ARTWORKÓW</div>
+      <div class="sval" x-text="(d.masters_pretty||'0 B') + (d.masters_count!=null ? (' · '+d.masters_count+' plików') : '')"></div></div>
+    <div class="scard"><div class="slbl">WOLNE / LIMIT (dysk)</div>
+      <div class="sval" x-text="d.limit_pretty ? (d.free_pretty + ' / ' + d.limit_pretty) : 'brak limitu'"></div></div>
+    <div class="scard"><div class="slbl">BUDŻET ARTWORKI</div>
+      <div class="sval" :style="(d.artwork_pct!=null && d.artwork_pct>=80)?'color:#dc2626':''"
+           x-text="d.artwork_budget_pretty ? (d.masters_pretty + ' / ' + d.artwork_budget_pretty + ' (' + d.artwork_pct + '%)') : 'brak budżetu'"></div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;margin:6px 0 14px;font-size:13px;flex-wrap:wrap">
+    <label>Limit dysku (GB):</label>
+    <input type="number" min="0" step="1" x-model="limitInput"
+           style="width:90px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">
+    <label style="margin-left:10px">Budżet artworki (GB):</label>
+    <input type="number" min="0" step="1" x-model="artworkInput"
+           style="width:90px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2)">
+    <button class="btn btn-sm btn-primary" @click="saveLimit()">Zapisz</button>
+    <span x-show="savedMsg" x-text="savedMsg" style="font-size:12px;color:#16a34a"></span>
+    <span style="font-size:11px;color:var(--muted)">np. dysk 160, artworki 5</span>
+  </div>
+  <div x-show="d.artwork_pct!=null && d.artwork_pct>=80"
+       style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px">
+    ⚠️ <b>Budżet artworków na wyczerpaniu</b> — zajęte <span x-text="d.artwork_pct"></span>% (<span x-text="d.masters_pretty"></span> z <span x-text="d.artwork_budget_pretty"></span>).
+    Zwiększ budżet powyżej albo dołóż miejsce. (To tylko ostrzeżenie — wgrywanie nie jest blokowane.)
+  </div>
+  <template x-if="(d.tables||[]).length">
+    <div class="scard" style="margin-top:4px">
+      <div class="slbl" style="margin-bottom:6px">NAJWIĘKSZE TABELE</div>
+      <template x-for="t in d.tables" :key="t.name">
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;border-top:1px solid var(--border)">
+          <span style="font-family:var(--mono)" x-text="t.name"></span><span x-text="t.pretty"></span>
+        </div>
+      </template>
+    </div>
+  </template>
+  <div x-show="d.error" style="color:var(--error);font-size:12px" x-text="d.error"></div>
+</div><!-- /pane-database -->
+<script>
+function dbUsage(){
+  return { d:{}, limitInput:'', artworkInput:'', savedMsg:'',
+    async load(){ try{ const r=await fetch('/api/admin/db-usage'); this.d=await r.json();
+      if(this.d.limit_gb!=null) this.limitInput=this.d.limit_gb;
+      if(this.d.artwork_budget_gb!=null) this.artworkInput=this.d.artwork_budget_gb; }catch(e){ this.d={error:'Błąd pobierania'}; } },
+    async saveLimit(){ this.savedMsg='';
+      const body={}; if(this.limitInput!=='') body.limit_gb=this.limitInput; if(this.artworkInput!=='') body.artwork_gb=this.artworkInput;
+      try{ const r=await fetch('/api/admin/db-limit',{method:'POST',headers:{'Content-Type':'application/json'},
+             body:JSON.stringify(body)});
+        const j=await r.json(); if(!r.ok){ this.savedMsg=''; alert(j.error||'Błąd'); return; }
+        this.savedMsg='Zapisano'; this.load(); setTimeout(()=>this.savedMsg='',2500);
+      }catch(e){ alert('Błąd połączenia'); } } };
+}
+</script>
+
+<!-- Edit user modal -->
+<div id="editModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeEditModal()" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+  <div class="modal-box">
+    <div id="editModalTitle" class="modal-title">Edytuj użytkownika: <span id="editModalName" style="color:var(--accent)"></span></div>
+    <div class="ff">
+      <label for="editUsername" style="font-size:11px;color:var(--muted);font-family:var(--mono);letter-spacing:1px">LOGIN</label>
+      <input type="text" id="editUsername" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 11px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:100%;box-sizing:border-box">
+    </div>
+    <div class="ff">
+      <label for="editEmail" style="font-size:11px;color:var(--muted);font-family:var(--mono);letter-spacing:1px">EMAIL</label>
+      <input type="email" id="editEmail" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 11px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;width:100%;box-sizing:border-box" autocomplete="email">
+    </div>
+    <div class="msg" id="editMsg"></div>
+    <div class="modal-actions">
+      <button type="button" class="bdel" style="border-color:var(--border);color:var(--muted)" onclick="closeEditModal()">Anuluj</button>
+      <button type="button" class="badd" onclick="saveEdit()">Zapisz</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+let _editUid = null;
+const ALL_MODULES = ['zakupy','transport','spedycja','magazyn','artwork','dane_ref','admin'];
+
+// ── chip helpers ─────────────────────────────────────────────────────────────
+function updateChip(m) {
+  const cb = document.querySelector(`#modCheckboxes input[value="${m}"]`);
+  const chip = document.getElementById(`chip_${m}`);
+  if (cb && chip) chip.classList.toggle('active', cb.checked);
+}
+function setChips(activeList) {
+  ALL_MODULES.forEach(m => {
+    const cb = document.querySelector(`#modCheckboxes input[value="${m}"]`);
+    if (cb) { cb.checked = activeList.includes(m); updateChip(m); }
+  });
+  // make chips clickable
+  ALL_MODULES.forEach(m => {
+    const chip = document.getElementById(`chip_${m}`);
+    if (chip) {
+      chip.onclick = () => {
+        const cb = chip.querySelector('input');
+        cb.checked = !cb.checked;
+        updateChip(m);
+      };
+    }
+  });
+}
+
+// ── modules modal ─────────────────────────────────────────────────────────────
+function editModules(id, name, dept, modules, role) {
+  document.getElementById('modUid').value = id;
+  document.getElementById('modUser').textContent = name;
+  document.getElementById('modUserRole').value = role || '';
+  document.getElementById('modDept').value = dept || '';
+  const active = (modules || '').split(',').map(s => s.trim()).filter(Boolean);
+  setChips(active);
+  document.getElementById('modalsModules').style.display = 'flex';
+}
+async function applyRoleDefaults() {
+  const role = document.getElementById('modUserRole').value;
+  if (!role) return;
+  try {
+    const r = await fetch('/api/admin/role-modules');
+    const d = await r.json();
+    const defaults = (d.config || {})[role] || [];
+    setChips(defaults);
+    toast('Zastosowano domyślne dla roli: ' + role, 'ok', 2000);
+  } catch(e) {
+    toast('Błąd ładowania domyślnych', 'error');
+  }
+}
+async function saveModules() {
+  const uid = document.getElementById('modUid').value;
+  const dept = document.getElementById('modDept').value;
+  const checked = [...document.querySelectorAll('#modCheckboxes input[type=checkbox]:checked')].map(cb => cb.value);
+  const modules = checked.join(',');
+  const res = await fetch(`/api/users/${uid}/modules`, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ department: dept, allowed_modules: modules })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    document.getElementById('modalsModules').style.display = 'none';
+    toast('Moduły zapisane', 'ok');
+    location.reload();
+  } else {
+    toast(data.error || 'Błąd zapisu', 'error');
+  }
+}
+
+// ── role change ───────────────────────────────────────────────────────────────
+async function changeRole(uid, sel) {
+  const newRole = sel.value;
+  const oldRole = sel.dataset.prev || sel.value;
+  sel.dataset.prev = newRole;
+  try {
+    const r = await fetch(`/api/users/${uid}/role`, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ role: newRole })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast(`Rola zmieniona na: ${newRole}`, 'ok');
+    } else {
+      sel.value = oldRole;
+      toast(d.error || 'Błąd zmiany roli', 'error');
+    }
+  } catch(e) {
+    sel.value = oldRole;
+    toast('Błąd połączenia', 'error');
+  }
+}
+// Store initial role values for rollback
+document.querySelectorAll('.role-select').forEach(sel => { sel.dataset.prev = sel.value; });
+
+// ── role-module defaults grid ─────────────────────────────────────────────────
+let _roleModConfig = {};
+const ROLE_LABELS = {user:'user',manager:'manager',superuser:'superuser',admin:'admin',forwarder:'forwarder',customs_agent:'customs_agent'};
+
+async function loadRoleModules() {
+  try {
+    const r = await fetch('/api/admin/role-modules');
+    const d = await r.json();
+    _roleModConfig = d.config || {};
+    renderRoleModGrid();
+  } catch(e) {
+    document.getElementById('roleModGrid').innerHTML = '<span style="color:var(--error);font-size:12px">Błąd ładowania</span>';
+  }
+}
+function renderRoleModGrid() {
+  const roles = ['user','manager','superuser','admin','forwarder','customs_agent'];
+  let html = '<table style="margin:0;width:100%;font-size:12px"><thead><tr>';
+  html += '<th scope="col" style="min-width:90px">Rola</th>';
+  ALL_MODULES.forEach(m => {
+    html += `<th scope="col" style="text-align:center;font-family:var(--mono);font-size:10px;letter-spacing:.5px">${m}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  roles.forEach(role => {
+    const active = _roleModConfig[role] || [];
+    html += `<tr class="role-mod-row"><td style="font-family:var(--mono);font-weight:600">${role}</td>`;
+    ALL_MODULES.forEach(m => {
+      const checked = active.includes(m);
+      html += `<td style="text-align:center">
+        <input type="checkbox" data-role="${role}" data-mod="${m}" ${checked?'checked':''}
+          onchange="toggleRoleMod('${role}','${m}',this.checked)"
+          style="accent-color:#6366f1;width:15px;height:15px;cursor:pointer"
+          aria-label="${m} dla ${role}">
+      </td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('roleModGrid').innerHTML = html;
+}
+function toggleRoleMod(role, mod, checked) {
+  if (!_roleModConfig[role]) _roleModConfig[role] = [];
+  if (checked) {
+    if (!_roleModConfig[role].includes(mod)) _roleModConfig[role].push(mod);
+  } else {
+    _roleModConfig[role] = _roleModConfig[role].filter(m => m !== mod);
+  }
+}
+async function saveRoleModules() {
+  const msg = document.getElementById('roleModMsg');
+  msg.textContent = 'Zapisywanie…';
+  try {
+    const r = await fetch('/api/admin/role-modules', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ config: _roleModConfig })
+    });
+    const d = await r.json();
+    if (d.ok) { msg.textContent = '✓ Zapisano'; msg.style.color = 'var(--ok)'; setTimeout(()=>{msg.textContent=''},3000); }
+    else { msg.textContent = '✕ ' + (d.error||'Błąd'); msg.style.color = 'var(--error)'; }
+  } catch(e) { msg.textContent = '✕ Błąd połączenia'; msg.style.color = 'var(--error)'; }
+}
+
+// ── edit user ─────────────────────────────────────────────────────────────────
+function editUser(id, name, email) {
+  _editUid = id;
+  document.getElementById('editModalName').textContent = name;
+  document.getElementById('editUsername').value = name;
+  document.getElementById('editEmail').value = email;
+  document.getElementById('editMsg').textContent = '';
+  document.getElementById('editModal').style.display = 'flex';
+  document.getElementById('editEmail').focus();
+}
+function closeEditModal() {
+  document.getElementById('editModal').style.display = 'none';
+  _editUid = null;
+}
+async function saveEdit() {
+  const uid = _editUid;
+  const username = document.getElementById('editUsername').value.trim();
+  const email = document.getElementById('editEmail').value.trim();
+  const m = document.getElementById('editMsg');
+  if (!username && !email) { m.textContent = 'Podaj login lub email.'; m.className = 'msg merr'; return; }
+  const body = {};
+  if (email) body.email = email;
+  if (username) body.username = username;
+  const r = await fetch(`/api/users/${uid}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  const d = await r.json();
+  if (d.ok) {
+    if (email) { const ec = document.getElementById(`uemail${uid}`); if (ec) ec.textContent = email; }
+    if (username) { const uc = document.getElementById(`uname${uid}`); if (uc) uc.innerHTML = `<strong>${esc(username)}</strong>`; }
+    closeEditModal();
+    toast('Dane użytkownika zaktualizowane', 'ok');
+  } else { m.textContent = '✕ ' + (d.error||'Błąd'); m.className = 'msg merr'; }
+}
+
+// ── add user ──────────────────────────────────────────────────────────────────
+let _fwdLoaded = false, _agcLoaded = false;
+function toggleForwarderField() {
+  const role = document.getElementById('nr').value;
+  const isFwd = role === 'forwarder';
+  const isAgc = role === 'customs_agent';
+  document.getElementById('forwarderField').style.display = isFwd ? '' : 'none';
+  document.getElementById('agencyField').style.display = isAgc ? '' : 'none';
+  if (isFwd && !_fwdLoaded) {
+    _fwdLoaded = true;
+    fetch('/api/transport/forwarders').then(r=>r.ok?r.json():[]).then(list=>{
+      const sel = document.getElementById('nfwd');
+      (list||[]).forEach(f=>{
+        const o = document.createElement('option');
+        o.value = f.id; o.textContent = (f.company||f.name) + ((f.company&&f.name)?' — '+f.name:'');
+        sel.appendChild(o);
+      });
+    }).catch(()=>{});
+  }
+  if (isAgc && !_agcLoaded) {
+    _agcLoaded = true;
+    fetch('/api/customs/agencies').then(r=>r.ok?r.json():[]).then(list=>{
+      const sel = document.getElementById('nagc');
+      (list||[]).forEach(a=>{
+        const o = document.createElement('option');
+        o.value = a.id; o.textContent = (a.company||a.name) + ((a.company&&a.name)?' — '+a.name:'');
+        sel.appendChild(o);
+      });
+    }).catch(()=>{});
+  }
+}
+async function addU() {
+  const u = document.getElementById('nu').value.trim();
+  const e = document.getElementById('ne').value.trim();
+  const p = document.getElementById('np').value;
+  const r = document.getElementById('nr').value;
+  const m = document.getElementById('amsg');
+  if (!u||!p) { m.textContent='Podaj login i hasło.'; m.className='msg merr'; return; }
+  if (p.length < 8) { m.textContent='Hasło min. 8 znaków.'; m.className='msg merr'; return; }
+  const payload = { username:u, email:e||null, password:p, role:r };
+  if (r === 'forwarder') {
+    const fwd = document.getElementById('nfwd').value;
+    if (!fwd) { m.textContent='Wybierz firmę spedycyjną dla spedytora.'; m.className='msg merr'; return; }
+    payload.forwarder_id = fwd;
+  }
+  if (r === 'customs_agent') {
+    const agc = document.getElementById('nagc').value;
+    if (!agc) { m.textContent='Wybierz agencję celną dla agenta.'; m.className='msg merr'; return; }
+    payload.customs_agency_id = agc;
+  }
+  const res = await fetch('/api/users', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+  const d = await res.json();
+  if (d.ok) {
+    m.textContent = `✓ Użytkownik ${u} dodany. Odśwież stronę.`; m.className = 'msg mok';
+    document.getElementById('nu').value=''; document.getElementById('ne').value=''; document.getElementById('np').value='';
+  } else { m.textContent = '✕ ' + (d.error||'Błąd'); m.className = 'msg merr'; }
+}
+
+// ── delete user ───────────────────────────────────────────────────────────────
+async function del(id, name) {
+  confirmModal(`Usunąć użytkownika „${name}"?`, async () => {
+    const r = await fetch(`/api/users/${id}`, { method:'DELETE' });
+    const d = await r.json();
+    if (d.ok) { document.getElementById(`r${id}`)?.remove(); toast('Użytkownik usunięty', 'ok'); }
+    else toast(d.error||'Błąd', 'error');
+  }, { okLabel:'Usuń', danger:true });
+}
+
+// ── password reset ────────────────────────────────────────────────────────────
+async function genReset(id, name, email) {
+  const noEmail = !email || email === '';
+  const msg = noEmail
+    ? `Użytkownik „${name}" nie ma przypisanego adresu email.\nLink reset hasła zostanie wygenerowany — skopiuj go ręcznie.`
+    : `Wysłać link resetu hasła do „${name}" na adres ${email}?`;
+  confirmModal(msg, async () => {
+    const r = await fetch(`/api/users/${id}/reset-link`, { method:'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      const url = location.origin + '/reset-password?token=' + d.token;
+      navigator.clipboard?.writeText(url).catch(()=>{});
+      if (d.email_sent) toast(`✓ Email wysłany do ${email}. Link ważny 24h.`, 'ok', 6000);
+      else if (d.has_email) toast('Błąd wysyłki emaila — skopiuj link: ' + url, 'error', 12000);
+      else toast('Brak emaila — link skopiowany: ' + url, 'info', 12000);
+      location.reload();
+    } else toast(d.error||'Błąd', 'error');
+  }, { okLabel: noEmail ? 'Generuj link' : 'Wyślij email' });
+}
+function copyLink(token) {
+  const url = location.origin + '/reset-password?token=' + token;
+  navigator.clipboard?.writeText(url)
+    .then(() => toast('Link skopiowany do schowka', 'ok'))
+    .catch(() => toast('Link: ' + url, 'info', 8000));
+}
+
+// ── AI config ─────────────────────────────────────────────────────────────────
+async function saveAiKey() {
+  const k = document.getElementById('aiKey').value.trim();
+  const m = document.getElementById('aiMsg');
+  if (!k) { m.textContent='Wklej klucz API.'; m.className='msg merr'; return; }
+  if (!k.startsWith('sk-ant-')) { m.textContent='Klucz powinien zaczynać się od sk-ant-'; m.className='msg merr'; return; }
+  const r = await fetch('/api/ai/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({api_key:k}) });
+  const d = await r.json();
+  if (d.ok) { m.textContent='✓ Klucz zapisany i aktywny'; m.className='msg mok'; document.getElementById('aiKey').value=''; loadAiStatus(); }
+  else { m.textContent='✕ '+(d.error||'Błąd'); m.className='msg merr'; }
+}
+async function loadAiStatus() {
+  try {
+    const r = await fetch('/api/ai/status');
+    const d = await r.json();
+    const s = document.getElementById('aiStatus');
+    if (d.api_key_set || d.ok) s.innerHTML = '<span style="color:var(--ok)">✓ Klucz API aktywny</span>' + (d.model?' — model: '+esc(d.model):'');
+    else s.innerHTML = '<span style="color:var(--error)">✗ Brak klucza — analiza AI niedostępna</span>';
+  } catch(e) { document.getElementById('aiStatus').textContent = 'Błąd sprawdzania statusu'; }
+}
+
+// ── ref database ──────────────────────────────────────────────────────────────
+async function loadRefDbStats() {
+  try {
+    const r = await fetch('/api/ref-database/stats');
+    const d = await r.json();
+    const el = document.getElementById('refDbStats');
+    if (d.count > 0) {
+      el.innerHTML = '<span style="color:var(--ok)">'+esc(d.count)+' kodów REF</span>'+(d.last_uploaded?'<br>ostatnio: '+esc(d.last_uploaded):'');
+      {% if session.get('role') == 'admin' %}
+      document.getElementById('refDbClearBtn').style.display = '';
+      {% endif %}
+    } else { el.textContent = 'Baza pusta'; }
+  } catch(e) { document.getElementById('refDbStats').textContent = 'Błąd ładowania statystyk'; }
+}
+async function uploadRefDb() {
+  const f = document.getElementById('refDbFile').files[0];
+  const m = document.getElementById('refDbMsg');
+  if (!f) return;
+  m.textContent = 'Importowanie...'; m.className = 'msg';
+  const fd = new FormData();
+  fd.append('file', f);
+  try {
+    const r = await fetch('/api/ref-database/upload', { method:'POST', body:fd });
+    const d = await r.json();
+    if (d.ok) { m.textContent = '✓ Zaimportowano: '+d.imported+' kodów, pominięto: '+d.skipped; m.className='msg mok'; loadRefDbStats(); }
+    else { m.textContent = '✕ '+(d.error||'Błąd'); m.className='msg merr'; }
+  } catch(e) { m.textContent = '✕ Błąd połączenia'; m.className='msg merr'; }
+  document.getElementById('refDbFile').value = '';
+}
+async function clearRefDb() {
+  confirmModal('Usunąć wszystkie wpisy z bazy REF? Tej operacji nie można cofnąć.', async () => {
+    const m = document.getElementById('refDbMsg');
+    try {
+      const r = await fetch('/api/ref-database', { method:'DELETE' });
+      const d = await r.json();
+      if (d.ok) { m.textContent='✓ Baza REF wyczyszczona'; m.className='msg mok'; document.getElementById('refDbClearBtn').style.display='none'; loadRefDbStats(); toast('Baza REF wyczyszczona', 'ok'); }
+      else { m.textContent='✕ '+(d.error||'Błąd'); m.className='msg merr'; toast(d.error||'Błąd','error'); }
+    } catch(e) { m.textContent='✕ Błąd połączenia'; m.className='msg merr'; }
+  }, { okLabel: 'Usuń wszystko', danger: true });
+}
+
+// ── system status ─────────────────────────────────────────────────────────────
+async function loadSystemStatus() {
+  const wrap = document.getElementById('sysStatusWrap');
+  wrap.innerHTML = '<span style="color:var(--muted);font-size:12px">Sprawdzanie…</span>';
+  try {
+    const _sr = await fetch('/api/admin/system-status');
+    if (!_sr.ok) throw new Error('HTTP ' + _sr.status);
+    const d = await _sr.json();
+    if (!d.ok) { wrap.innerHTML = '<span style="color:var(--error)">Błąd API</span>'; return; }
+    const s = d.summary;
+    const allOk = s.fail === 0;
+    let html = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+      <span style="font-size:22px;font-weight:700;color:${allOk?'var(--ok)':'var(--error)'}">${allOk?'✓ Wszystko OK':'✕ '+s.fail+' błędów'}</span>
+      <span style="font-size:12px;color:var(--muted)">${s.ok}/${s.total} zależności aktywnych</span>
+      <button type="button" onclick="loadSystemStatus()" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;color:var(--muted)">↻ Odśwież</button>
+    </div>`;
+    const sys = d.checks.filter(c=>!c.name.startsWith('py_'));
+    const py  = d.checks.filter(c=> c.name.startsWith('py_'));
+    function renderGroup(items, title) {
+      let g = `<div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:12px 0 6px">${title}</div>`;
+      g += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px">';
+      for (const c of items) {
+        const col = c.ok ? 'var(--ok)' : 'var(--error)';
+        g += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;display:flex;align-items:flex-start;gap:8px">
+          <span style="color:${col};font-weight:700;font-size:13px;flex-shrink:0;margin-top:1px">${c.ok?'✓':'✕'}</span>
+          <div style="min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text)">${esc(c.label)}</div>
+          ${c.detail?`<div style="font-size:11px;color:${c.ok?'var(--muted)':'var(--error)'};margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.detail)}">${esc(c.detail)}</div>`:''}</div></div>`;
+      }
+      return g + '</div>';
+    }
+    html += renderGroup(sys, 'Binaries systemowe');
+    html += renderGroup(py, 'Biblioteki Python');
+    const r = d.runtime;
+    html += `<div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:14px 0 6px">Środowisko runtime</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:12px;font-family:var(--mono);display:grid;grid-template-columns:1fr 1fr;gap:4px 20px">
+      <div><span style="color:var(--muted)">Python:</span> ${esc((r.python||'').split(' ')[0])}</div>
+      <div><span style="color:var(--muted)">Platform:</span> ${esc(r.platform)}</div>
+      <div><span style="color:var(--muted)">MASTERS_DIR:</span> ${esc(r.masters_dir)}</div>
+      <div><span style="color:${r.masters_dir_writable?'var(--ok)':'var(--error)'}">masters zapisywalny: ${r.masters_dir_writable?'tak':'NIE'}</span></div>
+      <div><span style="color:var(--muted)">DATA_DIR env:</span> ${esc(r.data_dir_env)}</div>
+      <div><span style="color:${r.database_url_set?'var(--ok)':'var(--muted)'}">DATABASE_URL: ${r.database_url_set?'ustawiony':'(brak — SQLite)'}</span></div>
+      <div><span style="color:${r.anthropic_key_set?'var(--ok)':'var(--error)'}">ANTHROPIC_API_KEY: ${r.anthropic_key_set?'ustawiony':'BRAK'}</span></div>
+    </div>`;
+    wrap.innerHTML = html;
+  } catch(e) {
+    wrap.innerHTML = `<span style="color:var(--error)">Błąd: ${esc(e.message)}</span>`;
+  }
+}
+
+// ── zakładki panelu admina ─────────────────────────────────────────────────────
+function admTab(name){
+  document.querySelectorAll('.adm-pane').forEach(function(p){ p.classList.toggle('active', p.id === 'pane-'+name); });
+  document.querySelectorAll('.adm-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.pane === name); });
+  try { localStorage.setItem('admTab', name); } catch(e){}
+}
+
+// ── init ──────────────────────────────────────────────────────────────────────
+loadAiStatus();
+loadSystemStatus();
+loadRoleModules();
+// Przywróć ostatnio otwartą zakładkę.
+try { var _at = localStorage.getItem('admTab'); if (_at && document.getElementById('pane-'+_at)) admTab(_at); } catch(e){}
+</script>
+{% endblock %}

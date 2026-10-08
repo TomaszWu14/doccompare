@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+{% block title %}Kalendarz ETD/ETA — DocCompare{% endblock %}
+{% block extra_head %}
+<style>
+
+/* Stats row */
+.cal-stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.cal-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 18px;
+  min-width: 140px;
+  flex: 1;
+}
+.cal-stat-num {
+  font-size: 28px;
+  font-weight: 800;
+  font-family: var(--mono);
+  line-height: 1;
+}
+.cal-stat-lbl {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.stat-blue .cal-stat-num { color: var(--accent); }
+.stat-green .cal-stat-num { color: var(--ok); }
+.stat-red .cal-stat-num { color: var(--error); }
+.stat-orange .cal-stat-num { color: var(--warn); }
+
+/* Calendar nav */
+.cal-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+}
+.cal-title {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+.cal-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text);
+  transition: background .15s, border-color .15s;
+}
+.cal-btn:hover { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+.cal-btn.today-btn { font-size: 12px; }
+
+/* Calendar grid */
+.cal-grid-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.cal-day-header {
+  background: var(--bg);
+  padding: 8px 6px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.cal-day-header.weekend { background: color-mix(in srgb, var(--bg) 80%, var(--accent) 8%); }
+
+.cal-cell {
+  min-height: 80px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 5px;
+  vertical-align: top;
+  position: relative;
+  transition: background .12s;
+}
+.cal-cell:nth-child(7n) { border-right: none; }
+.cal-cell.weekend { background: color-mix(in srgb, var(--surface) 92%, var(--bg) 8%); }
+.cal-cell:hover { background: var(--accent-bg); }
+.cal-cell.empty { background: var(--bg); opacity: .5; }
+.cal-cell.today { background: color-mix(in srgb, var(--accent-bg) 70%, var(--surface) 30%); }
+.cal-cell.today .cal-day-num { color: var(--accent); font-weight: 800; }
+
+.cal-day-num {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 3px;
+  display: block;
+}
+
+/* Event pills */
+.cal-events { display: flex; flex-direction: column; gap: 2px; }
+.cal-pill {
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  text-decoration: none;
+  display: block;
+  transition: opacity .12s;
+  line-height: 1.4;
+}
+.cal-pill:hover { opacity: .8; }
+.pill-red    { background: rgba(220,38,38,.18); color: #dc2626; border-left: 2px solid #dc2626; }
+.pill-yellow { background: rgba(217,119,6,.18); color: #d97706; border-left: 2px solid #d97706; }
+.pill-green  { background: rgba(5,150,105,.18); color: var(--ok); border-left: 2px solid var(--ok); }
+.pill-blue   { background: rgba(29,78,216,.15); color: var(--accent); border-left: 2px solid var(--accent); }
+.pill-orange { background: rgba(234,88,12,.18); color: #ea580c; border-left: 2px solid #ea580c; }
+
+/* Mobile list view */
+.cal-list { display: none; }
+.cal-list-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.cal-list-date { font-size: 11px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+.cal-list-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+
+@media (max-width: 640px) {
+  .cal-grid-wrap { display: none; }
+  .cal-list { display: block; }
+  .cal-stats { gap: 8px; }
+  .cal-stat { min-width: 100px; }
+}
+</style>
+{% endblock %}
+
+{% block page_title %}Kalendarz ETD/ETA{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Kalendarz ETD / ETA</h1>
+  <p>Terminy załadunku, dostawy kontenerów i oczekujące odprawy SAD</p>
+</div>
+
+<!-- Stats row -->
+<div class="cal-stats" id="calStats">
+  <div class="cal-stat stat-blue">
+    <div class="cal-stat-num" id="statEtd">—</div>
+    <div class="cal-stat-lbl">ETD w tym miesiącu</div>
+  </div>
+  <div class="cal-stat stat-green">
+    <div class="cal-stat-num" id="statEta">—</div>
+    <div class="cal-stat-lbl">ETA w tym miesiącu</div>
+  </div>
+  <div class="cal-stat stat-red">
+    <div class="cal-stat-num" id="statUrgent">—</div>
+    <div class="cal-stat-lbl">Pilne (≤3 dni)</div>
+  </div>
+  <div class="cal-stat stat-orange">
+    <div class="cal-stat-num" id="statSad">—</div>
+    <div class="cal-stat-lbl">Oczekujące SAD</div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<nav class="cal-nav" aria-label="Nawigacja kalendarza">
+  <button type="button" class="cal-btn" id="btnPrev" aria-label="Poprzedni miesiąc">&#8592; Poprzedni</button>
+  <div class="cal-title" id="calTitle" aria-live="polite" aria-atomic="true">Ładowanie…</div>
+  <button type="button" class="cal-btn today-btn" id="btnToday" aria-label="Przejdź do dzisiaj">Dzisiaj</button>
+  <button type="button" class="cal-btn" id="btnNext" aria-label="Następny miesiąc">Następny &#8594;</button>
+</nav>
+
+<!-- Desktop grid -->
+<div class="cal-grid-wrap" role="grid" aria-label="Kalendarz ETD/ETA">
+  <div class="cal-grid" id="calHeaderRow" role="row">
+    <div class="cal-day-header" role="columnheader" abbr="Poniedziałek">Pon</div>
+    <div class="cal-day-header" role="columnheader" abbr="Wtorek">Wt</div>
+    <div class="cal-day-header" role="columnheader" abbr="Środa">Śr</div>
+    <div class="cal-day-header" role="columnheader" abbr="Czwartek">Czw</div>
+    <div class="cal-day-header" role="columnheader" abbr="Piątek">Pt</div>
+    <div class="cal-day-header weekend" role="columnheader" abbr="Sobota">Sob</div>
+    <div class="cal-day-header weekend" role="columnheader" abbr="Niedziela">Nd</div>
+  </div>
+  <div class="cal-grid" id="calGrid"></div>
+</div>
+
+<!-- Mobile list view -->
+<div class="cal-list" id="calList"></div>
+
+<script>
+(function() {
+  const containers = {{ (containers or []) | tojson }};
+  const sadList    = {{ (sad_list or []) | tojson }};
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayDate = new Date(todayStr + 'T00:00:00');
+
+  // State
+  let curYear  = todayDate.getFullYear();
+  let curMonth = todayDate.getMonth(); // 0-based
+
+  // Polish month names
+  const MONTHS = [
+    'Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec',
+    'Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'
+  ];
+
+  function etaUrgencyClass(etaStr) {
+    if (!etaStr) return 'pill-blue';
+    const eta = new Date(etaStr.slice(0,10) + 'T00:00:00');
+    const diffDays = Math.round((eta - todayDate) / 86400000);
+    if (diffDays <= 3)  return 'pill-red';
+    if (diffDays <= 7)  return 'pill-yellow';
+    return 'pill-green';
+  }
+
+  // Build event map: { 'YYYY-MM-DD': [ {type, label, cls, href}, ... ] }
+  function buildEventMap(year, month) {
+    const map = {};
+    function add(dateStr, ev) {
+      if (!dateStr || dateStr.length < 10) return;
+      const key = dateStr.slice(0,10);
+      if (!map[key]) map[key] = [];
+      map[key].push(ev);
+    }
+
+    containers.forEach(function(c) {
+      const num = c.container_number || '?';
+      if (c.eta) {
+        add(c.eta, {
+          label: '\u{1F6A2} ' + num,
+          cls: etaUrgencyClass(c.eta),
+          href: '/transport/queue'
+        });
+      }
+      if (c.etd) {
+        add(c.etd, {
+          label: '\u{1F4E6} ' + num,
+          cls: 'pill-blue',
+          href: '/transport/queue'
+        });
+      }
+    });
+
+    sadList.forEach(function(s) {
+      const dateStr = (s.created_at || '').slice(0,10);
+      add(dateStr, {
+        label: '\u{1F6C3} SAD — ' + (s.po_number || s.id),
+        cls: 'pill-orange',
+        href: '/sad'
+      });
+    });
+
+    return map;
+  }
+
+  function updateStats(year, month) {
+    let etdCount = 0, etaCount = 0, urgentCount = 0;
+    const monthStr = String(year) + '-' + String(month + 1).padStart(2, '0');
+
+    containers.forEach(function(c) {
+      if (c.etd && c.etd.slice(0,7) === monthStr) etdCount++;
+      if (c.eta) {
+        if (c.eta.slice(0,7) === monthStr) etaCount++;
+        const diff = Math.round((new Date(c.eta.slice(0,10) + 'T00:00:00') - todayDate) / 86400000);
+        if (diff >= 0 && diff <= 3) urgentCount++;
+      }
+    });
+
+    document.getElementById('statEtd').textContent = etdCount;
+    document.getElementById('statEta').textContent = etaCount;
+    document.getElementById('statUrgent').textContent = urgentCount;
+    document.getElementById('statSad').textContent = sadList.length;
+  }
+
+  function renderCalendar(year, month) {
+    document.getElementById('calTitle').textContent = MONTHS[month] + ' ' + year;
+    updateStats(year, month);
+
+    const eventMap = buildEventMap(year, month);
+
+    // First day of month (0=Sun … 6=Sat), convert to Mon-based (0=Mon … 6=Sun)
+    const firstDay = new Date(year, month, 1).getDay();
+    const startOffset = (firstDay === 0) ? 6 : firstDay - 1;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const grid = document.getElementById('calGrid');
+    grid.innerHTML = '';
+
+    // Leading empty cells
+    for (let i = 0; i < startOffset; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell empty' + (i >= 5 ? ' weekend' : '');
+      grid.appendChild(cell);
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = year + '-' + String(month + 1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+      const dayOfWeek = (startOffset + d - 1) % 7; // 0=Mon … 6=Sun
+      const isWeekend = dayOfWeek >= 5;
+      const isToday = dateStr === todayStr;
+
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell' + (isWeekend ? ' weekend' : '') + (isToday ? ' today' : '');
+
+      const dayNum = document.createElement('span');
+      dayNum.className = 'cal-day-num';
+      dayNum.textContent = d;
+      cell.appendChild(dayNum);
+
+      const evWrap = document.createElement('div');
+      evWrap.className = 'cal-events';
+
+      const evs = eventMap[dateStr] || [];
+      evs.forEach(function(ev) {
+        const pill = document.createElement('a');
+        pill.className = 'cal-pill ' + ev.cls;
+        pill.textContent = ev.label;
+        pill.href = ev.href;
+        pill.title = ev.label;
+        evWrap.appendChild(pill);
+      });
+
+      cell.appendChild(evWrap);
+      grid.appendChild(cell);
+    }
+
+    // Trailing empty cells to complete last row
+    const totalCells = startOffset + daysInMonth;
+    const remainder = totalCells % 7;
+    if (remainder !== 0) {
+      const trailing = 7 - remainder;
+      for (let i = 0; i < trailing; i++) {
+        const cell = document.createElement('div');
+        const dayOfWeek = (totalCells + i) % 7;
+        cell.className = 'cal-cell empty' + (dayOfWeek >= 5 ? ' weekend' : '');
+        grid.appendChild(cell);
+      }
+    }
+
+    // Mobile list view
+    renderList(year, month, eventMap, daysInMonth);
+  }
+
+  function renderList(year, month, eventMap, daysInMonth) {
+    const list = document.getElementById('calList');
+    list.innerHTML = '';
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = year + '-' + String(month + 1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+      const evs = eventMap[dateStr] || [];
+      if (evs.length === 0) continue;
+
+      const item = document.createElement('div');
+      item.className = 'cal-list-item';
+
+      const dateLabel = document.createElement('div');
+      dateLabel.className = 'cal-list-date';
+      dateLabel.textContent = d + ' ' + MONTHS[month] + ' ' + year + (dateStr === todayStr ? ' — DZISIAJ' : '');
+      item.appendChild(dateLabel);
+
+      const pillsWrap = document.createElement('div');
+      pillsWrap.className = 'cal-list-pills';
+      evs.forEach(function(ev) {
+        const pill = document.createElement('a');
+        pill.className = 'cal-pill ' + ev.cls;
+        pill.textContent = ev.label;
+        pill.href = ev.href;
+        pill.title = ev.label;
+        pill.style.cssText = 'white-space:normal;overflow:visible;text-overflow:clip;';
+        pillsWrap.appendChild(pill);
+      });
+      item.appendChild(pillsWrap);
+      list.appendChild(item);
+    }
+
+    if (list.innerHTML === '') {
+      list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;font-size:14px">Brak zdarzeń w tym miesiącu</div>';
+    }
+  }
+
+  function goToMonth(year, month) {
+    curYear  = year;
+    curMonth = month;
+    renderCalendar(curYear, curMonth);
+  }
+
+  document.getElementById('btnPrev').addEventListener('click', function() {
+    let m = curMonth - 1, y = curYear;
+    if (m < 0) { m = 11; y--; }
+    goToMonth(y, m);
+  });
+
+  document.getElementById('btnNext').addEventListener('click', function() {
+    let m = curMonth + 1, y = curYear;
+    if (m > 11) { m = 0; y++; }
+    goToMonth(y, m);
+  });
+
+  document.getElementById('btnToday').addEventListener('click', function() {
+    goToMonth(todayDate.getFullYear(), todayDate.getMonth());
+  });
+
+  // Initial render
+  renderCalendar(curYear, curMonth);
+})();
+</script>
+{% endblock %}

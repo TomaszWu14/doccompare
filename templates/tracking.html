@@ -1,0 +1,699 @@
+{% extends "base.html" %}
+{% block title %}Śledzenie kontenerów — DocCompare{% endblock %}
+
+{% block extra_head %}
+<style>
+
+.trk-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+.trk-card h2 { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 14px; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  transition: all .12s;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--muted); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { opacity: .88; }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-danger { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.btn-danger:hover { background: #fca5a5; }
+
+.api-key-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.api-key-input {
+  flex: 1;
+  min-width: 200px;
+  max-width: 400px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--mono);
+}
+.api-key-input:focus { outline: none; border-color: var(--accent); }
+
+.track-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: var(--mono);
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+  min-height: 100px;
+}
+.track-textarea:focus { outline: none; border-color: var(--accent); }
+.track-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+/* Result cards */
+.res-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.res-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.res-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 10px;
+}
+.res-number { font-size: 15px; font-weight: 800; color: var(--text); font-family: var(--mono); }
+.res-carrier { font-size: 11px; color: var(--muted); font-weight: 600; }
+
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.status-delivered  { background: #d1fae5; color: #065f46; }
+.status-transit    { background: #dbeafe; color: #1e40af; }
+.status-customs    { background: #fef3c7; color: #92400e; }
+.status-exception  { background: #fee2e2; color: #991b1b; }
+.status-unknown    { background: var(--surface2); color: var(--muted); }
+.status-no-api     { background: #fef3c7; color: #92400e; }
+
+.res-route {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.res-route .port { font-weight: 600; color: var(--text); }
+.res-route .arrow { color: var(--accent); font-size: 14px; }
+
+.res-eta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.res-eta .eta-val { font-weight: 700; color: var(--text); }
+.res-eta .eta-soon { color: var(--warn); font-weight: 700; }
+
+.res-last-event {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 10px;
+  background: var(--surface2);
+  border-radius: 7px;
+  border-left: 3px solid var(--border);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.res-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.res-events { margin-top: 8px; display: none; }
+.res-events.open { display: block; }
+.event-row {
+  display: flex;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+}
+.event-row:last-child { border-bottom: none; }
+.event-date { white-space: nowrap; flex-shrink: 0; min-width: 120px; }
+.event-desc { flex: 1; }
+
+/* No-API banner */
+.api-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  color: #92400e;
+  font-size: 13px;
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+[data-theme="dark"] .api-banner { background: #1c1400; border-color: #78350f; color: #fbbf24; }
+.api-banner-icon { font-size: 20px; flex-shrink: 0; }
+
+/* Saved table */
+.trk-table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: auto;
+}
+.trk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 750px;
+}
+.trk-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.trk-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.trk-table tr:last-child td { border-bottom: none; }
+.trk-table tr:hover td { background: var(--surface2); }
+.container-num { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text); }
+
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.section-title { font-size: 16px; font-weight: 700; color: var(--text); margin: 28px 0 14px; display: flex; align-items: center; gap: 8px; }
+</style>
+{% endblock %}
+
+{% block page_title %}Śledzenie kontenerów{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px">
+
+  <div class="page-header">
+    <div>
+      <h1>🚢 Śledzenie kontenerów</h1>
+      <p>Śledzenie statusu kontenerów morskich w czasie rzeczywistym
+        {% if has_safecube %}via SafeCube{% elif has_17track %}via 17track.net{% else %}— skonfiguruj dostawcę poniżej{% endif %}</p>
+    </div>
+  </div>
+
+  <!-- No-API banner (shown if no containers have been successfully tracked) -->
+  <div class="api-banner" id="noBanner" style="display:none">
+    <span class="api-banner-icon">⚠️</span>
+    <div>
+      <strong>17track API nie skonfigurowane.</strong> Klucz API wymagany do automatycznego śledzenia.
+      Rejestracja na <a href="https://api.17track.net" target="_blank" style="text-decoration:underline" rel="noopener noreferrer">api.17track.net</a>
+      jest bezpłatna dla 100 zapytań/miesiąc. Skonfiguruj klucz poniżej.
+    </div>
+  </div>
+
+  <!-- Settings: API key (managers only) -->
+  {% if role in ['admin', 'superuser', 'manager'] %}
+  <div class="trk-card">
+    <h2>⚙️ Konfiguracja API 17track</h2>
+    <div class="api-key-row">
+      <input type="password" class="api-key-input" id="apiKeyInput"
+             placeholder="Wpisz klucz API 17track…"
+             autocomplete="off">
+      <button type="button" class="btn btn-primary" onclick="saveApiKey()">Zapisz klucz</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:8px">
+      Klucz API przechowywany jest bezpiecznie w bazie danych. Uzyskaj go bezpłatnie na
+      <a href="https://api.17track.net" target="_blank" style="color:var(--accent);text-decoration:underline" rel="noopener noreferrer">api.17track.net</a>
+      (100 zapytań/miesiąc za darmo).
+    </p>
+  </div>
+
+  <!-- Settings: SafeCube / Sinay (managers only) -->
+  <div class="trk-card">
+    <h2>⚙️ Konfiguracja API SafeCube</h2>
+    <div class="api-key-row">
+      <input type="password" class="api-key-input" id="safecubeKeyInput"
+             placeholder="Wpisz API key z app.safecube.ai/api/credentials…"
+             autocomplete="off">
+      <button type="button" class="btn btn-primary" onclick="saveApiKey('safecube','safecubeKeyInput')">Zapisz klucz</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:8px">
+      Agregator oceaniczny (COSCO, Maersk i inne) — najtańszy per kontener. Klucz z
+      <a href="https://app.safecube.ai/api/credentials" target="_blank" style="color:var(--accent);text-decoration:underline" rel="noopener noreferrer">app.safecube.ai</a>.
+    </p>
+  </div>
+
+  <!-- Settings: ShipsGo (managers only) -->
+  <div class="trk-card">
+    <h2>⚙️ Konfiguracja API ShipsGo</h2>
+    <div class="api-key-row">
+      <input type="password" class="api-key-input" id="shipsgoKeyInput"
+             placeholder="Wpisz authCode z dashboardu ShipsGo (sekcja API)…"
+             autocomplete="off">
+      <button type="button" class="btn btn-primary" onclick="saveApiKey('shipsgo','shipsgoKeyInput')">Zapisz klucz</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:8px">
+      Agregator oceaniczny, model kredytowy (1 kredyt = 1 kontener do końca rejsu).
+      Klucz (authCode) wygenerujesz w panelu
+      <a href="https://shipsgo.com" target="_blank" style="color:var(--accent);text-decoration:underline" rel="noopener noreferrer">shipsgo.com</a>
+      → sekcja API.
+    </p>
+  </div>
+
+  <!-- Settings: TrackCargo (managers only) -->
+  <div class="trk-card">
+    <h2>⚙️ Konfiguracja API TrackCargo</h2>
+    <div class="api-key-row">
+      <input type="password" class="api-key-input" id="trackcargoKeyInput"
+             placeholder="Wpisz API key z dashboardu TrackCargo…"
+             autocomplete="off">
+      <button type="button" class="btn btn-primary" onclick="saveApiKey('trackcargo','trackcargoKeyInput')">Zapisz klucz</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:8px">
+      Agregator oceaniczny (COSCO, Maersk i inne). Klucz znajdziesz w panelu na
+      <a href="https://trackcargo.co/dashboard" target="_blank" style="color:var(--accent);text-decoration:underline" rel="noopener noreferrer">trackcargo.co</a>.
+    </p>
+  </div>
+
+  <!-- Settings: Maersk Consumer-Key (managers only) -->
+  <div class="trk-card">
+    <h2>⚙️ Konfiguracja API Maersk</h2>
+    <div class="api-key-row">
+      <input type="password" class="api-key-input" id="maerskKeyInput"
+             placeholder="Wpisz Consumer-Key z developer.maersk.com…"
+             autocomplete="off">
+      <button type="button" class="btn btn-primary" onclick="saveApiKey('maersk','maerskKeyInput')">Zapisz klucz</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:8px">
+      Bezpośredni tracking Maersk (wymaga konta firmowego). Zarejestruj aplikację i subskrybuj „Track &amp; Trace" na
+      <a href="https://developer.maersk.com" target="_blank" style="color:var(--accent);text-decoration:underline" rel="noopener noreferrer">developer.maersk.com</a>.
+    </p>
+  </div>
+  {% endif %}
+
+  <!-- Track input -->
+  <div class="trk-card">
+    <h2>🔍 Śledź kontener</h2>
+
+    <div class="api-key-row" style="margin-bottom:12px">
+      <label for="providerSelect" style="font-size:12px;color:var(--muted);font-weight:600">Dostawca:</label>
+      <select id="providerSelect" class="api-key-input" style="max-width:220px;font-family:inherit" onchange="onProviderChange()">
+        <option value="auto" {% if not has_17track and not has_safecube %}disabled{% endif %}>Automatyczny{% if has_safecube %} (SafeCube){% elif has_17track %} (17track){% endif %}</option>
+        <option value="safecube" {% if not has_safecube %}disabled{% endif %}>SafeCube{% if not has_safecube %} — brak klucza{% endif %}</option>
+        <option value="17track" {% if not has_17track %}disabled{% endif %}>17track{% if not has_17track %} — brak klucza{% endif %}</option>
+        <option value="shipsgo" {% if not has_shipsgo %}disabled{% endif %}>ShipsGo{% if not has_shipsgo %} — brak klucza{% endif %}</option>
+      </select>
+
+      <label id="sealineLabel" for="sealineSelect" style="font-size:12px;color:var(--muted);font-weight:600">Armator:</label>
+      <select id="sealineSelect" class="api-key-input" style="max-width:220px;font-family:inherit">
+        <option value="">— auto-wykrywanie —</option>
+        {% for code, name in sealines %}
+        <option value="{{ code }}">{{ name }} ({{ code }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <textarea class="track-textarea" id="trackInput"
+              placeholder="Wpisz numery kontenerów lub numery BL — jeden na linię (max 10)&#10;np. MSCU1234567&#10;COSU6312345678"></textarea>
+    <!-- FIX 14: line counter feedback -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+      <p class="track-hint" style="margin:0">
+        Obsługiwane: numery kontenerów (ISO 6346) oraz numery konosamentu (BL).
+        Dla SafeCube wybór armatora przyspiesza wykrywanie. Maks. 10 numerów naraz.
+      </p>
+      <span id="lineCounter" style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:12px"></span>
+    </div>
+    <div style="margin-top:12px">
+      <button type="button" class="btn btn-primary" id="trackBtn" onclick="trackContainers()">
+        <span id="trackBtnIcon">🚢</span> Śledź
+      </button>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="trackResults" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- Saved containers table -->
+  {% if containers %}
+  <div class="section-title">📋 Zapisane kontenery <span style="font-size:13px;font-weight:400;color:var(--muted)">({{ containers|length }})</span></div>
+  <div class="trk-table-wrap">
+    <table class="trk-table">
+      <thead>
+        <tr>
+          <th scope="col">Numer kontenera</th>
+          <th scope="col">Przewoźnik</th>
+          <th scope="col">Status</th>
+          <th scope="col">Trasa</th>
+          <th scope="col">ETA</th>
+          <th scope="col">Ostatnie zdarzenie</th>
+          <th scope="col">Sprawdzono</th>
+          <th scope="col">Akcje</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in containers %}
+        <tr id="row-{{ c.container_number }}">
+          <td><span class="container-num">{{ c.container_number }}</span></td>
+          <td style="color:var(--muted);font-size:12px">{{ c.carrier or '—' }}</td>
+          <td>
+            {% set s = c.status or 'unknown' %}
+            {% if s == 'Dostarczono' %}
+              <span class="status-badge status-delivered">{{ s }}</span>
+            {% elif 'transport' in s or 'porcie' in s or 'W porcie' == s %}
+              <span class="status-badge status-transit">{{ s }}</span>
+            {% elif 'celne' in s or 'odprawa' in s or 'Odprawa' in s %}
+              <span class="status-badge status-customs">{{ s }}</span>
+            {% elif 'Wyj' in s or 'exception' in s %}
+              <span class="status-badge status-exception">{{ s }}</span>
+            {% elif s == 'no_api' %}
+              <span class="status-badge status-no-api">Brak API</span>
+            {% else %}
+              <span class="status-badge status-unknown">{{ s }}</span>
+            {% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--muted)">
+            {% if c.origin_port or c.dest_port %}
+              {{ c.origin_port or '?' }} → {{ c.dest_port or '?' }}
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-size:12px">
+            {% if c.eta %}
+              <span class="ts-rel" data-ts="{{ c.eta }}">{{ c.eta }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-size:12px;color:var(--muted);max-width:220px">
+            {% if c.last_event %}
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px" title="{{ c.last_event }}">
+                {{ c.last_event[:80] }}{% if c.last_event|length > 80 %}…{% endif %}
+              </div>
+              {% if c.last_event_date %}
+                <div style="font-size:11px;color:var(--muted)">{{ c.last_event_date[:10] }}</div>
+              {% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-size:11px;color:var(--muted)">
+            {% if c.last_checked %}
+              <span class="ts-rel" data-ts="{{ c.last_checked }}">{{ c.last_checked }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="white-space:nowrap">
+            <button type="button" class="btn btn-sm" onclick="refreshOne({{ c.container_number|tojson }})" title="Odśwież">🔄</button>
+            {% if role in ['admin', 'superuser', 'manager'] %}
+            <button type="button" class="btn btn-sm btn-danger" onclick="deleteContainer({{ c.container_number|tojson }})" title="Usuń">🗑</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="section-title">📋 Zapisane kontenery</div>
+  <div style="text-align:center;padding:48px 20px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:12px">
+    <div style="font-size:40px;margin-bottom:12px">🚢</div>
+    <div style="font-weight:600;color:var(--text);margin-bottom:6px">Brak śledzonych kontenerów</div>
+    <div style="font-size:13px">Wpisz numer kontenera powyżej i kliknij "Śledź"</div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+function getStatusClass(status) {
+  var s = (status || '').toLowerCase();
+  if (s === 'dostarczono') return 'status-delivered';
+  if (s.indexOf('transport') !== -1 || s.indexOf('porcie') !== -1) return 'status-transit';
+  if (s.indexOf('celne') !== -1 || s.indexOf('odprawa') !== -1) return 'status-customs';
+  if (s.indexOf('wyj') !== -1 || s.indexOf('exception') !== -1) return 'status-exception';
+  if (s === 'no_api') return 'status-no-api';
+  return 'status-unknown';
+}
+
+function renderStatusBadge(status) {
+  var cls = getStatusClass(status);
+  return '<span class="status-badge ' + cls + '">' + escHtml(status || 'Nieznany') + '</span>';
+}
+
+// FIX 17: escHtml() is defined in base.html — no local duplicate needed.
+
+function isEtaSoon(etaStr) {
+  if (!etaStr) return false;
+  var d = new Date(etaStr);
+  if (isNaN(d)) return false;
+  var diff = (d.getTime() - Date.now()) / 86400000;
+  return diff >= 0 && diff <= 7;
+}
+
+function renderResults(results) {
+  if (!results || !results.length) return;
+
+  var hasNoApi = results.some(function(r){ return r.status === 'no_api'; });
+  document.getElementById('noBanner').style.display = hasNoApi ? 'flex' : 'none';
+
+  var html = '<div class="section-title">📦 Wyniki śledzenia</div><div class="res-grid">';
+
+  results.forEach(function(r, i) {
+    var events = r.events || [];
+    var evHtml = '';
+    if (events.length) {
+      evHtml = '<button type="button" class="res-toggle-btn" onclick="toggleEvents(\'ev' + i + '\')" id="evBtn' + i + '">Historia (' + events.length + ') ▼</button>'
+             + '<div class="res-events" id="ev' + i + '">'
+             + events.map(function(e){
+                 return '<div class="event-row">'
+                   + '<div class="event-date">' + escHtml(e.a || e.date || '') + '</div>'
+                   + '<div class="event-desc">' + escHtml(e.z || e.desc || '') + '</div>'
+                   + '</div>';
+               }).join('')
+             + '</div>';
+    }
+
+    var etaHtml = '';
+    if (r.eta) {
+      var etaClass = isEtaSoon(r.eta) ? 'eta-soon' : 'eta-val';
+      etaHtml = '<div class="res-eta">ETA: <span class="' + etaClass + '">' + escHtml(r.eta) + '</span>'
+              + (isEtaSoon(r.eta) ? ' ⚠️' : '') + '</div>';
+    }
+
+    var routeHtml = '';
+    if (r.origin_port || r.dest_port) {
+      routeHtml = '<div class="res-route">'
+        + '<span class="port">' + escHtml(r.origin_port || '?') + '</span>'
+        + '<span class="arrow">→</span>'
+        + '<span class="port">' + escHtml(r.dest_port || '?') + '</span>'
+        + '</div>';
+    }
+
+    html += '<div class="res-card">'
+      + '<div class="res-card-header">'
+      + '<div><div class="res-number">' + escHtml(r.number) + '</div>'
+      + (r.carrier ? '<div class="res-carrier">' + escHtml(r.carrier) + '</div>' : '')
+      + '</div>'
+      + renderStatusBadge(r.status)
+      + '</div>'
+      + routeHtml
+      + etaHtml
+      + (r.last_event ? '<div class="res-last-event">' + escHtml(r.last_event) + (r.last_event_date ? '<br><small>' + escHtml(r.last_event_date) + '</small>' : '') + '</div>' : '')
+      + evHtml
+      + '</div>';
+  });
+
+  html += '</div>';
+  document.getElementById('trackResults').innerHTML = html;
+}
+
+function toggleEvents(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('open');
+  var btn = document.getElementById(id.replace('ev', 'evBtn'));
+  if (btn) {
+    var isOpen = el.classList.contains('open');
+    btn.textContent = btn.textContent.replace(isOpen ? '▼' : '▲', isOpen ? '▲' : '▼');
+  }
+}
+
+function trackContainers() {
+  var val = document.getElementById('trackInput').value.trim();
+  if (!val) { toast('Wpisz numer kontenera', 'warn'); return; }
+  var numbers = val.split('\n').map(function(n){ return n.trim().toUpperCase(); }).filter(Boolean);
+  if (numbers.length > 10) { toast('Maksymalnie 10 kontenerów naraz', 'warn'); return; }
+
+  var btn = document.getElementById('trackBtn');
+  // FIX 13: save original text so it is always restored (even on error)
+  var origText = btn.textContent;
+  var icon = document.getElementById('trackBtnIcon');
+  btn.disabled = true;
+  icon.innerHTML = '<span class="spinner"></span>';
+  document.getElementById('trackResults').innerHTML = '<div style="padding:20px;color:var(--muted);text-align:center">Śledzenie kontenerów…</div>';
+
+  var provEl = document.getElementById('providerSelect');
+  var seaEl  = document.getElementById('sealineSelect');
+  var provider = provEl ? provEl.value : 'auto';
+  var sealine  = seaEl ? seaEl.value : '';
+
+  function restoreBtn() {
+    btn.disabled = false;
+    icon.textContent = '🚢';
+    btn.textContent = origText;
+  }
+
+  fetch('/api/tracking/track', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCsrf()},
+    body: JSON.stringify({numbers: numbers, provider: provider, sealine: sealine})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    restoreBtn();
+    if (d.error) { toast(d.error, 'error'); document.getElementById('trackResults').innerHTML = ''; return; }
+    renderResults(d.results || []);
+    toast('Pobrano dane dla ' + (d.results||[]).length + ' kontenera(ów)', 'ok');
+    // Reload after short delay to update saved list
+    setTimeout(function(){ location.reload(); }, 2500);
+  })
+  .catch(function(e){
+    restoreBtn();
+    toast('Błąd: ' + e, 'error');
+    document.getElementById('trackResults').innerHTML = '';
+  });
+}
+
+// Armator (sealine) ma znaczenie tylko dla SafeCube — dla 17track ukryj.
+function onProviderChange() {
+  var prov = document.getElementById('providerSelect').value;
+  var show = (prov === 'safecube' || prov === 'auto');
+  var lbl = document.getElementById('sealineLabel');
+  var sel = document.getElementById('sealineSelect');
+  if (lbl) lbl.style.display = show ? '' : 'none';
+  if (sel) sel.style.display = show ? '' : 'none';
+}
+document.addEventListener('DOMContentLoaded', onProviderChange);
+
+// FIX 16: cooldown prevents rapid double-clicks on the refresh button
+var _refreshCooldowns = {};
+function refreshOne(number) {
+  if (_refreshCooldowns[number]) return;
+  _refreshCooldowns[number] = true;
+  try {
+    document.getElementById('trackInput').value = number;
+    trackContainers();
+  } finally {
+    setTimeout(function() { delete _refreshCooldowns[number]; }, 2000);
+  }
+}
+
+function deleteContainer(number) {
+  confirmModal('Usunąć kontener ' + number + ' z listy?', function(){
+    fetch('/api/tracking/' + encodeURIComponent(number), { method: 'DELETE', headers: {'X-CSRF-Token': getCsrf()} })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.ok) {
+          var row = document.getElementById('row-' + number);
+          if (row) row.remove();
+          toast('Kontener usunięty', 'ok');
+        } else {
+          toast(d.error || 'Błąd usuwania', 'error');
+        }
+      })
+      .catch(function(e){ toast('Błąd: ' + e, 'error'); });
+  }, { title: 'Usuń kontener', danger: true, okLabel: 'Usuń' });
+}
+
+function saveApiKey(provider, inputId) {
+  provider = provider || '17track';
+  inputId = inputId || 'apiKeyInput';
+  var input = document.getElementById(inputId);
+  var key = input.value.trim();
+  fetch('/api/tracking/save-key', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': getCsrf()},
+    body: JSON.stringify({api_key: key, provider: provider})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.ok) {
+      toast(key ? 'Klucz API zapisany' : 'Klucz API wyczyszczony', 'ok');
+      input.value = '';
+    } else {
+      toast(d.error || 'Błąd zapisu klucza', 'error');
+    }
+  })
+  .catch(function(e){ toast('Błąd: ' + e, 'error'); });
+}
+
+// ── FIX 14: textarea line counter ────────────────────────────────────────────
+(function() {
+  var textarea = document.getElementById('trackInput');
+  if (!textarea) return;
+  textarea.addEventListener('input', function() {
+    var lines = this.value.split('\n').filter(function(l){ return l.trim(); }).length;
+    var counter = document.getElementById('lineCounter');
+    if (!counter) return;
+    counter.classList.remove('text-orange-500');
+    counter.style.color = '';
+    if (lines === 0) {
+      counter.textContent = '';
+    } else if (lines > 100) {
+      counter.textContent = lines + ' kontenerów (max 100 zostanie przetworzone)';
+      counter.style.color = '#f97316';
+    } else {
+      counter.textContent = lines + ' kontener' + (lines === 1 ? '' : lines < 5 ? 'y' : 'ów');
+    }
+  });
+})();
+
+// ── FIX 15: trim whitespace from pasted API keys ─────────────────────────────
+document.querySelectorAll('.api-key-input[type="password"]').forEach(function(apiKeyInput) {
+  apiKeyInput.addEventListener('paste', function() {
+    var self = this;
+    setTimeout(function() {
+      var trimmed = self.value.trim();
+      if (trimmed !== self.value) {
+        self.value = trimmed;
+        toast('Usunięto białe znaki z klucza API', 'info');
+      }
+    }, 0);
+  });
+});
+
+// ── FIX 18: Ctrl+Enter (or plain Enter when textarea is focused) to track ────
+document.getElementById('trackInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    trackContainers();
+  }
+});
+
+</script>
+{% endblock %}

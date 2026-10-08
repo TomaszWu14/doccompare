@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Taryfa CN/TARIC — DocCompare{% endblock %}
+{% block extra_head %}
+<style>
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:22px}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;position:relative;overflow:hidden}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),#7c3aed)}
+.kpi-num{font-size:32px;font-weight:800;font-family:var(--mono);color:var(--accent)}
+.kpi-lbl{font-size:11px;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.warn .kpi-num{color:var(--warn)}.gray .kpi-num{color:var(--muted)}
+
+.import-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:22px}
+.import-box h3{font-size:13px;font-weight:600;margin-bottom:6px}
+.import-box p{font-size:12px;color:var(--muted);margin-bottom:12px}
+.import-box code{background:var(--bg);padding:1px 6px;border-radius:5px;font-family:var(--mono);font-size:11px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+input[type=file]{font-size:12px;color:var(--muted)}
+.btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:13px;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+#impMsg{font-size:12px;margin-left:8px}
+
+.section{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.section-hdr{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.section-hdr h2{font-size:14px;font-weight:600;flex:1}
+.sec-badge{background:var(--bg);color:var(--muted);font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;font-family:var(--mono)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px 16px;background:var(--bg);color:var(--muted);font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:8px 16px;border-bottom:1px solid rgba(42,45,58,.35);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.mono{font-family:var(--mono)}.text-gray{color:var(--muted);font-size:12px}
+.tag{font-size:11px;padding:1px 8px;border-radius:8px;font-weight:600}
+.tag.r{background:rgba(217,119,6,.16);color:#fbbf24}.tag.off{background:rgba(220,38,38,.16);color:#f87171}
+.empty{padding:36px;text-align:center;color:var(--muted);font-size:14px}
+</style>
+{% endblock %}
+
+{% block page_title %}Taryfa CN/TARIC{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>📋 Taryfa referencyjna CN/TARIC</h1>
+  <p>Lokalna baza kodów nomenklatury — zasila walidację istnienia kodów CN w audycie SAD</p>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi-card"><div class="kpi-num">{{ total }}</div><div class="kpi-lbl">Kodów w taryfie</div></div>
+  <div class="kpi-card warn"><div class="kpi-num">{{ restricted }}</div><div class="kpi-lbl">Z ograniczeniami</div></div>
+  <div class="kpi-card gray"><div class="kpi-num">{{ inactive }}</div><div class="kpi-lbl">Nieaktywnych</div></div>
+  <div class="kpi-card gray"><div class="kpi-num" style="font-size:18px;padding-top:9px">{{ last_update or '—' }}</div><div class="kpi-lbl">Ostatni import</div></div>
+</div>
+
+<div class="import-box">
+  <h3>⬆ Import nomenklatury (CSV)</h3>
+  <p>Kolumny: <code>code</code>, <code>description</code>, <code>duty_rate</code>, <code>restrictions</code>, <code>active</code>
+     (akceptowane też: <code>Kod/CN</code>, <code>Opis</code>, <code>Stawka</code>, <code>Ograniczenia</code>, <code>Aktywny</code>).
+     Kod normalizowany do samych cyfr; istniejące kody są aktualizowane.</p>
+  <div class="row">
+    <input type="file" id="csvFile" accept=".csv">
+    <button class="btn" onclick="importCsv()">Importuj</button>
+    <span id="impMsg"></span>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-hdr"><i data-lucide="list" style="width:16px;height:16px"></i><h2>Ostatnio zaimportowane</h2><span class="sec-badge">{{ sample|length }}</span></div>
+  {% if sample %}
+  <div style="overflow-x:auto"><table>
+    <thead><tr><th>Kod</th><th>Opis</th><th>Stawka</th><th>Ograniczenia</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for r in sample %}
+      <tr>
+        <td class="mono">{{ r.code }}</td>
+        <td>{{ r.description or '—' }}</td>
+        <td class="mono text-gray">{{ r.duty_rate or '—' }}</td>
+        <td>{% if r.restrictions %}<span class="tag r">{{ r.restrictions }}</span>{% else %}<span class="text-gray">—</span>{% endif %}</td>
+        <td>{% if r.active == 0 %}<span class="tag off">nieaktywny</span>{% else %}<span class="text-gray">aktywny</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <div class="empty">Taryfa jest pusta — zaimportuj plik CSV z nomenklaturą CN/TARIC.</div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded',()=>{if(typeof lucide!=='undefined')lucide.createIcons();});
+async function importCsv(){
+  const inp=document.getElementById('csvFile');
+  const msg=document.getElementById('impMsg');
+  if(!inp.files.length){ msg.style.color='#f87171'; msg.textContent='Wybierz plik CSV.'; return; }
+  const fd=new FormData(); fd.append('file', inp.files[0]);
+  msg.style.color='var(--muted)'; msg.textContent='Importowanie…';
+  try{
+    const r=await fetch('/api/cn-reference/import',{method:'POST',body:fd});
+    const d=await r.json().catch(()=>({}));
+    if(r.ok){ msg.style.color='#34d399'; msg.textContent=`Zaimportowano ${d.imported}, pominięto ${d.skipped}.`;
+      setTimeout(()=>location.reload(),900); }
+    else { msg.style.color='#f87171'; msg.textContent=d.error||'Błąd importu.'; }
+  }catch(e){ msg.style.color='#f87171'; msg.textContent='Błąd połączenia.'; }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f1119">
+<title>DocCompare — wybierz moduł</title>
+<style>
+:root{
+  --bg:#0f1119;--surface:#181b27;--surface2:#1e2235;--border:#252840;
+  --text:#edf0f7;--muted:#7a84a0;--accent:#5b9bff;
+  --ok:#3ddba0;--warn:#ffb347;--error:#ff5c5c;
+  --accent2:#7c6af7;
+  --mono:'IBM Plex Mono','Fira Code',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;flex-direction:column}
+a{color:inherit;text-decoration:none}
+
+.header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 32px;height:60px;
+  border-bottom:1px solid var(--border);
+  background:rgba(15,17,25,.97);
+  backdrop-filter:blur(12px);
+  position:sticky;top:0;z-index:100;
+}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+.brand-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;background:linear-gradient(135deg,rgba(91,155,255,.25),rgba(124,106,247,.2));border:1px solid rgba(91,155,255,.3)}
+.brand-name{background:linear-gradient(90deg,#5b9bff,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header-right{display:flex;align-items:center;gap:12px}
+.user-info{font-size:12px;font-family:var(--mono);color:var(--muted)}
+.role-badge{font-size:11px;padding:2px 9px;border-radius:20px;font-family:var(--mono);font-weight:600;letter-spacing:.3px}
+.role-admin    {background:rgba(255,92,92,.15);color:#ff7e7e;border:1px solid rgba(255,92,92,.2)}
+.role-superuser{background:rgba(124,106,247,.15);color:#a78bfa;border:1px solid rgba(124,106,247,.2)}
+.role-manager  {background:rgba(255,179,71,.15);color:#ffb347;border:1px solid rgba(255,179,71,.2)}
+.role-user     {background:rgba(91,155,255,.15);color:#7eb8ff;border:1px solid rgba(91,155,255,.2)}
+.btn-logout{font-size:12px;color:var(--muted);padding:5px 11px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none;font-family:var(--mono);transition:all .15s;text-decoration:none;display:inline-block}
+.btn-logout:hover{border-color:var(--error);color:var(--error);background:rgba(255,92,92,.07)}
+
+.main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px}
+
+.hero{text-align:center;margin-bottom:56px}
+.hero-eyebrow{font-size:11px;font-family:var(--mono);color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px}
+.hero h1{font-size:42px;font-weight:800;letter-spacing:-.8px;line-height:1.1;margin-bottom:14px}
+.hero h1 .grad{background:linear-gradient(90deg,#5b9bff 0%,#a78bfa 60%,#3ddba0 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{color:var(--muted);font-size:15px;max-width:500px;margin:0 auto;line-height:1.7}
+
+.modules{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:1200px;width:100%}
+@media(max-width:900px){.modules{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.modules{grid-template-columns:1fr}}
+
+.module-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:36px 32px 28px;
+  cursor:pointer;
+  transition:transform .22s,box-shadow .22s,border-color .22s;
+  display:flex;flex-direction:column;gap:14px;
+  position:relative;overflow:hidden;
+}
+.module-card::after{
+  content:'';position:absolute;inset:0;border-radius:18px;
+  opacity:0;transition:opacity .22s;pointer-events:none;
+}
+.module-card.docs::after{background:linear-gradient(140deg,rgba(91,155,255,.07) 0%,transparent 60%)}
+.module-card.art::after {background:linear-gradient(140deg,rgba(124,106,247,.09) 0%,transparent 60%)}
+.module-card.scan::after{background:linear-gradient(140deg,rgba(61,219,160,.08) 0%,transparent 60%)}
+.module-card:hover{transform:translateY(-5px);box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.module-card.docs:hover{border-color:rgba(91,155,255,.35)}
+.module-card.art:hover {border-color:rgba(124,106,247,.4)}
+.module-card.scan:hover{border-color:rgba(61,219,160,.35)}
+.module-card:hover::after{opacity:1}
+
+.mc-icon{font-size:44px;line-height:1;margin-bottom:2px}
+.mc-title{font-size:21px;font-weight:700;color:#fff;letter-spacing:-.2px}
+.mc-desc{color:var(--muted);font-size:13px;line-height:1.7;flex:1}
+
+.mc-features{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.mc-feature{display:flex;align-items:center;gap:8px;font-size:12px;color:#8a9ab8}
+.mc-feature-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.dot-blue{background:#5b9bff}
+.dot-purple{background:#a78bfa}
+
+.mc-tags{display:flex;gap:5px;flex-wrap:wrap}
+.mc-tag{font-size:11px;padding:2px 8px;border-radius:12px;font-family:var(--mono);font-weight:500;white-space:nowrap}
+.tag-blue  {background:rgba(91,155,255,.12);color:#7eb8ff;border:1px solid rgba(91,155,255,.2)}
+.tag-purple{background:rgba(124,106,247,.12);color:#a78bfa;border:1px solid rgba(124,106,247,.2)}
+.tag-green {background:rgba(61,219,160,.1);color:#3ddba0;border:1px solid rgba(61,219,160,.18)}
+.tag-amber {background:rgba(255,179,71,.1);color:#ffb347;border:1px solid rgba(255,179,71,.2)}
+
+.mc-cta{
+  margin-top:6px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding-top:16px;
+  border-top:1px solid var(--border);
+}
+.mc-cta-label{font-size:13px;font-weight:600;transition:gap .2s}
+.module-card.docs .mc-cta-label{color:var(--accent)}
+.module-card.art  .mc-cta-label{color:#a78bfa}
+.module-card.scan .mc-cta-label{color:#3ddba0}
+.mc-cta-arrow{font-size:18px;transition:transform .2s}
+.module-card:hover .mc-cta-arrow{transform:translateX(5px)}
+
+.footer-links{display:flex;align-items:center;gap:20px;flex-wrap:wrap;justify-content:center}
+.footer-links a{font-size:12px;font-family:var(--mono);color:var(--muted);padding-bottom:2px;border-bottom:1px solid var(--border);transition:color .15s,border-color .15s}
+.footer-links a:hover{color:var(--text);border-color:var(--muted)}
+.recent-row{display:flex;align-items:center;gap:12px;padding:11px 16px;text-decoration:none;color:var(--text);transition:background .15s}
+.recent-row:hover{background:var(--surface2)}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="brand">
+    <div class="brand-icon" aria-hidden="true">🏥</div>
+    <span class="brand-name">DocCompare</span>
+  </div>
+  <nav class="header-right" aria-label="Konto użytkownika">
+    <span class="user-info">{{ username }}</span>
+    <span class="role-badge role-{{ role }}">{{ role }}</span>
+    <a href="/logout" class="btn-logout">Wyloguj</a>
+  </nav>
+</header>
+
+<main class="main">
+  <div class="hero">
+    <div class="hero-eyebrow">ACME</div>
+    <h1>Wybierz <span class="grad">moduł</span></h1>
+    <p>Zakupy · Transport · Spedycja — platforma obsługi importu wyrobów medycznych</p>
+  </div>
+
+  <div class="modules">
+    <!-- Zakupy -->
+    <a href="/analyze" class="module-card docs">
+      <div class="mc-icon">📦</div>
+      <div class="mc-title">Zakupy</div>
+      <div class="mc-desc">Porównanie dokumentów handlowych, weryfikacja artworków, dane produktów i dostawców.</div>
+      <div class="mc-features">
+        <div class="mc-feature"><div class="mc-feature-dot dot-blue"></div>Porównanie PO / PI / CI / Packing list · SAD</div>
+        <div class="mc-feature"><div class="mc-feature-dot dot-blue"></div>Agent proforma · Historia · Produkty · Dostawcy</div>
+        <div class="mc-feature"><div class="mc-feature-dot dot-blue"></div>Artwork · PDF → Excel</div>
+      </div>
+      <div class="mc-tags">
+        <span class="mc-tag tag-blue">Dokumenty</span>
+        <span class="mc-tag tag-purple">Artwork</span>
+        <span class="mc-tag tag-green">PDF → Excel</span>
+      </div>
+      <div class="mc-cta">
+        <span class="mc-cta-label">Otwórz moduł</span>
+        <span class="mc-cta-arrow">→</span>
+      </div>
+    </a>
+
+    <!-- Transport -->
+    <a href="/transport/queue" class="module-card scan">
+      <div class="mc-icon">🚢</div>
+      <div class="mc-title">Transport</div>
+      <div class="mc-desc">Kolejka kontenerów, śledzenie na żywo, kalendarz ETD/ETA, awizacja i przyjęcia magazynowe.</div>
+      <div class="mc-features">
+        <div class="mc-feature"><div class="mc-feature-dot" style="background:#3ddba0"></div>Kolejka transportowa · Kalendarz ETD/ETA</div>
+        <div class="mc-feature"><div class="mc-feature-dot" style="background:#3ddba0"></div>Śledzenie kontenerów (API) · Dostawy</div>
+        <div class="mc-feature"><div class="mc-feature-dot" style="background:#3ddba0"></div>Awizacja kierowców · Magazyn</div>
+      </div>
+      <div class="mc-tags">
+        <span class="mc-tag tag-green">Kontenery</span>
+        <span class="mc-tag tag-green">Tracking</span>
+        <span class="mc-tag tag-green">Awizacja</span>
+      </div>
+      <div class="mc-cta">
+        <span class="mc-cta-label">Otwórz moduł</span>
+        <span class="mc-cta-arrow">→</span>
+      </div>
+    </a>
+
+    <!-- Spedycja (portal zewnętrzny) -->
+    {% if role in ['admin', 'superuser', 'manager'] %}
+    <a href="/spedycja" class="module-card art">
+    {% else %}
+    <div class="module-card art" style="cursor:default">
+    {% endif %}
+      <div class="mc-icon">🚛</div>
+      <div class="mc-title">Spedycja</div>
+      <div class="mc-desc">Portal zewnętrzny dla spedytorów. Zlecenia wysyłane z Transportu, agent celny i statusy odpraw wracają do kolejki.</div>
+      <div class="mc-features">
+        <div class="mc-feature"><div class="mc-feature-dot dot-purple"></div>Zlecenia spedycyjne z modułu Transport</div>
+        <div class="mc-feature"><div class="mc-feature-dot dot-purple"></div>Agent celny · statusy odpraw</div>
+        <div class="mc-feature"><div class="mc-feature-dot dot-purple"></div>Aktualizacja kolejki w czasie rzeczywistym</div>
+      </div>
+      <div class="mc-tags">
+        <span class="mc-tag tag-purple">Portal zewnętrzny</span>
+        <span class="mc-tag tag-green">Aktywny</span>
+      </div>
+      <div class="mc-cta">
+        {% if role in ['admin', 'superuser', 'manager'] %}
+        <span class="mc-cta-label">Zarządzaj spedytorami</span>
+        <span class="mc-cta-arrow">→</span>
+        {% else %}
+        <span class="mc-cta-label" style="color:#7a84a0">Portal zewnętrzny</span>
+        {% endif %}
+      </div>
+    {% if role in ['admin', 'superuser', 'manager'] %}
+    </a>
+    {% else %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if role in ["admin","superuser"] %}
+  <div class="footer-links" style="margin-top:32px">
+    <a href="/admin">⚙️ Panel admina</a>
+  </div>
+  {% endif %}
+
+  <!-- STATS STRIP -->
+  <div style="display:flex;gap:24px;margin-top:40px;flex-wrap:wrap;justify-content:center">
+    <div style="text-align:center">
+      <div style="font-size:28px;font-weight:800;color:var(--accent)">{{ total_comparisons or 0 }}</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.5px">porównań dokumentów</div>
+    </div>
+    <div style="width:1px;background:var(--border)"></div>
+    <div style="text-align:center">
+      <div style="font-size:28px;font-weight:800;color:var(--accent2, #a78bfa)">{{ total_artworks or 0 }}</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.5px">porównań artworków</div>
+    </div>
+    {% if total_users is not none %}
+    <div style="width:1px;background:var(--border)"></div>
+    <div style="text-align:center">
+      <div style="font-size:28px;font-weight:800;color:var(--ok)">{{ total_users }}</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.5px">użytkowników</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- RECENT ACTIVITY -->
+  {% if recent %}
+  <div style="margin-top:36px;width:100%;max-width:900px">
+    <div style="font-size:11px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Ostatnia aktywność</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      {% for r in recent %}
+      <a href="/history#c{{ r.id }}" class="recent-row" style="border-bottom:{{ '1px solid var(--border)' if not loop.last else 'none' }}">
+        <span style="font-size:11px;font-family:var(--mono);color:var(--muted);min-width:32px">#{{ r.id }}</span>
+        <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.file_a }} → {{ r.file_b }}</span>
+        {% if r.status == 'ok' %}<span style="font-size:11px;color:var(--ok);font-family:var(--mono)">✓ ok</span>
+        {% elif r.status in ['warning', 'ostrzezenie'] %}<span style="font-size:11px;color:var(--warn);font-family:var(--mono)">⚠ ostrzeżenie</span>
+        {% else %}<span style="font-size:11px;color:var(--error);font-family:var(--mono)">✗ {{ r.status }}</span>{% endif %}
+        <span style="font-size:11px;color:var(--muted);font-family:var(--mono);white-space:nowrap">{{ r.created_at[:16].replace('T',' ') if r.created_at else '' }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    <div style="text-align:right;margin-top:8px"><a href="/history" style="font-size:12px;color:var(--accent);font-family:var(--mono)">Zobacz całą historię →</a></div>
+  </div>
+  {% endif %}
+
+</main>
+
+</body>
+</html>

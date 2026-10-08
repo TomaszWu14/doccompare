@@ -1,0 +1,821 @@
+{% extends "base.html" %}
+{% block title %}Spedycja i kierowcy — DocCompare{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── PAGE HEADER ──────────────────────────────────────────────────────────── */
+
+/* ── TABS ─────────────────────────────────────────────────────────────────── */
+.tabs-nav {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 24px;
+}
+.tab-btn {
+  padding: 10px 22px; font-size: 13px; font-weight: 600; cursor: pointer;
+  border: none; background: none; color: var(--muted);
+  border-bottom: 2px solid transparent; transition: all .15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ── BUTTONS ──────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); transition: all .12s; white-space: nowrap; text-decoration: none;
+}
+.btn:hover { border-color: var(--muted); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { opacity: .88; }
+.btn-sm { padding: 5px 11px; font-size: 12px; }
+.btn-icon { padding: 5px 8px; font-size: 13px; }
+.btn-copy { background: #f0fdf4; color: #15803d; border-color: #86efac; }
+.btn-copy:hover { background: #dcfce7; }
+[data-theme="dark"] .btn-copy { background: #052e16; color: #4ade80; border-color: #166534; }
+
+/* ── TABLE ────────────────────────────────────────────────────────────────── */
+.tbl-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+.tbl-card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); gap: 12px; flex-wrap: wrap; }
+.tbl-card-header h3 { font-size: 14px; font-weight: 700; color: var(--text); }
+.tbl-wrap { overflow-x: auto; }
+table.dt { width: 100%; border-collapse: collapse; }
+table.dt th {
+  background: var(--surface2); color: var(--muted);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+table.dt td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  font-size: 13px; color: var(--text); vertical-align: middle;
+}
+table.dt tr:last-child td { border-bottom: none; }
+table.dt tr:hover td { background: var(--surface2); }
+.empty-state-row td { text-align: center; padding: 42px 20px; color: var(--muted); }
+.mono { font-family: var(--mono); font-size: 12px; }
+.truncate-cell { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── STATUS BADGES ────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.badge-sent     { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+.badge-confirmed{ background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+.badge-declined { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.badge-expired  { background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb; }
+[data-theme="dark"] .badge-sent      { background: #0c1a40; color: #7eb8ff; border-color: #1d4ed8; }
+[data-theme="dark"] .badge-confirmed { background: #052e16; color: #4ade80; border-color: #166534; }
+[data-theme="dark"] .badge-declined  { background: #2d0a0a; color: #f87171; border-color: #7f1d1d; }
+[data-theme="dark"] .badge-expired   { background: #1f2937; color: #9ca3af; border-color: #374151; }
+
+/* ── MODAL ────────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.45); z-index: 9000;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 24px; width: 540px; max-width: 96vw;
+  max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.22);
+}
+.modal-box h2 { font-size: 16px; font-weight: 700; margin-bottom: 18px; color: var(--text); }
+.modal-close-btn {
+  float: right; background: none; border: none; font-size: 20px;
+  cursor: pointer; color: var(--muted); margin-top: -4px; line-height: 1;
+}
+.modal-close-btn:hover { color: var(--text); }
+
+/* ── FORM ELEMENTS ────────────────────────────────────────────────────────── */
+.form-row { margin-bottom: 14px; }
+.form-row label {
+  display: block; font-size: 12px; font-weight: 600; color: var(--muted);
+  margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px;
+}
+.form-row input,
+.form-row select,
+.form-row textarea {
+  width: 100%; padding: 8px 11px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; color: var(--text);
+  background: var(--surface); transition: border-color .12s;
+}
+.form-row input:focus,
+.form-row select:focus,
+.form-row textarea:focus { outline: none; border-color: var(--accent); }
+.form-row textarea { resize: vertical; min-height: 70px; }
+.form-row input[type="password"] { letter-spacing: .1em; }
+.form-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 480px) { .form-2col { grid-template-columns: 1fr; } }
+.form-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
+}
+
+/* ── SMS SETTINGS CARD ────────────────────────────────────────────────────── */
+.settings-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px 24px; margin-top: 28px;
+}
+.settings-card h3 { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 16px; }
+.provider-extra { display: none; }
+.provider-extra.open { display: block; }
+.sms-save-status { font-size: 12px; font-weight: 600; }
+.sms-save-status.ok    { color: var(--ok); }
+.sms-save-status.error { color: var(--error); }
+
+/* ── NOTIFY RESULT ────────────────────────────────────────────────────────── */
+.notify-result { margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 13px; display: none; }
+.notify-result.ok    { background: #f0fdf4; border: 1px solid #86efac; color: #15803d; }
+.notify-result.warn  { background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; }
+.notify-result.error { background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; }
+[data-theme="dark"] .notify-result.ok   { background: #052e16; border-color: #166534; color: #4ade80; }
+[data-theme="dark"] .notify-result.warn { background: #1c1400; border-color: #78350f; color: #fbbf24; }
+.notify-url { font-family: var(--mono); font-size: 11px; word-break: break-all; margin-top: 6px;
+              background: var(--surface2); padding: 6px 8px; border-radius: 6px; }
+</style>
+{% endblock %}
+
+{% block page_title %}Awizacja{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1>🚛 Spedycja i kierowcy</h1>
+    <p>Baza spedytorów, kierowców i historia powiadomień SMS</p>
+  </div>
+</div>
+
+{# ── TABS ──────────────────────────────────────────────────────────────────── #}
+<div class="tabs-nav">
+  <button type="button" class="tab-btn active" onclick="showTab('forwarders', this)">
+    🏢 Spedytorzy ({{ forwarders | length }})
+  </button>
+  <button type="button" class="tab-btn" onclick="showTab('drivers', this)">
+    🚛 Kierowcy ({{ drivers | length }})
+  </button>
+  <button type="button" class="tab-btn" onclick="showTab('notifications', this)">
+    📧 Powiadomienia SMS ({{ notifications | length }})
+  </button>
+</div>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   TAB 1 — SPEDYTORZY
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="tab-pane active" id="pane-forwarders">
+  <div class="tbl-card">
+    <div class="tbl-card-header">
+      <h3>Spedytorzy</h3>
+      {% if role in ['manager','admin','superuser'] %}
+      <button type="button" class="btn btn-primary btn-sm" onclick="openFwdModal()">＋ Dodaj spedytora</button>
+      {% endif %}
+    </div>
+    <div class="tbl-wrap">
+      <table class="dt">
+        <thead>
+          <tr>
+            <th scope="col">Nazwa</th>
+            <th scope="col">Firma</th>
+            <th scope="col">Telefon</th>
+            <th scope="col">Email</th>
+            <th scope="col">NIP</th>
+            <th scope="col">Adres</th>
+            {% if role in ['manager','admin','superuser'] %}<th scope="col">Akcje</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% if forwarders %}
+            {% for f in forwarders %}
+            <tr>
+              <td><strong>{{ f.name }}</strong></td>
+              <td>{{ f.company or '—' }}</td>
+              <td><span class="mono">{{ f.phone or '—' }}</span></td>
+              <td>{{ f.email or '—' }}</td>
+              <td><span class="mono">{{ f.nip or '—' }}</span></td>
+              <td style="font-size:12px;color:var(--muted)">{{ f.address or '—' }}</td>
+              {% if role in ['manager','admin','superuser'] %}
+              <td style="white-space:nowrap">
+                <button type="button" class="btn btn-sm btn-icon" title="Edytuj" aria-label="Edytuj"
+                  onclick='openFwdEditModal({{ f | tojson }})'>✏️</button>
+                {% if role == 'admin' %}
+                <button type="button" class="btn btn-sm btn-icon" title="Usuń spedytora"
+                  style="color:#dc2626;border-color:rgba(220,38,38,.3)"
+                  onclick="deleteForwarder({{ f.id }}, {{ f.name | tojson }})">🗑</button>
+                {% endif %}
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr class="empty-state-row">
+              <td colspan="7">
+                <div style="font-size:36px;margin-bottom:10px">🏢</div>
+                <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">Brak spedytorów</div>
+                <div>Dodaj spedytora klikając przycisk powyżej.</div>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   TAB 2 — KIEROWCY
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="tab-pane" id="pane-drivers">
+  <div class="tbl-card">
+    <div class="tbl-card-header">
+      <h3>Kierowcy</h3>
+      {% if role in ['manager','admin','superuser'] %}
+      <button type="button" class="btn btn-primary btn-sm" onclick="openDrvModal()">＋ Dodaj kierowcę</button>
+      {% endif %}
+    </div>
+    <div class="tbl-wrap">
+      <table class="dt">
+        <thead>
+          <tr>
+            <th scope="col">Imię i nazwisko</th>
+            <th scope="col">Telefon</th>
+            <th scope="col">Rejestracja TIR</th>
+            <th scope="col">Spedytor</th>
+            {% if role in ['manager','admin','superuser'] %}<th scope="col">Akcje</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% if drivers %}
+            {% for d in drivers %}
+            <tr>
+              <td><strong>{{ d.name }}</strong></td>
+              <td><span class="mono">{{ d.phone }}</span></td>
+              <td><span class="mono">{{ d.truck_plate or '—' }}</span></td>
+              <td>{{ d.forwarder_name or '—' }}</td>
+              {% if role in ['manager','admin','superuser'] %}
+              <td style="white-space:nowrap">
+                <button type="button" class="btn btn-sm btn-icon" title="Edytuj" aria-label="Edytuj"
+                  onclick='openDrvEditModal({{ d | tojson }})'>✏️</button>
+                {% if role == 'admin' %}
+                <button type="button" class="btn btn-sm btn-icon" title="Usuń kierowcę"
+                  style="color:#dc2626;border-color:rgba(220,38,38,.3)"
+                  onclick="deleteDriver({{ d.id }}, {{ d.name | tojson }})">🗑</button>
+                {% endif %}
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr class="empty-state-row">
+              <td colspan="5">
+                <div style="font-size:36px;margin-bottom:10px">🚛</div>
+                <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">Brak kierowców</div>
+                <div>Dodaj kierowcę klikając przycisk powyżej.</div>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   TAB 3 — POWIADOMIENIA SMS
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="tab-pane" id="pane-notifications">
+  <div class="tbl-card">
+    <div class="tbl-card-header">
+      <h3>Historia powiadomień SMS</h3>
+      <button type="button" class="btn btn-primary btn-sm" onclick="openNotifyModal()">📤 Wyślij powiadomienie</button>
+    </div>
+    <div class="tbl-wrap">
+      <table class="dt">
+        <thead>
+          <tr>
+            <th scope="col">Kierowca</th>
+            <th scope="col">Telefon</th>
+            <th scope="col">Kontener</th>
+            <th scope="col">PO</th>
+            <th scope="col">Miejsce załadunku</th>
+            <th scope="col">Godzina</th>
+            <th scope="col">Status</th>
+            <th scope="col">Wysłano</th>
+            <th scope="col">Potwierdzono</th>
+            <th scope="col">Akcje</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if notifications %}
+            {% for n in notifications %}
+            <tr>
+              <td><strong>{{ n.driver_name or '—' }}</strong></td>
+              <td><span class="mono">{{ n.driver_phone or '—' }}</span></td>
+              <td><span class="mono">{{ n.container_number or '—' }}</span></td>
+              <td><span class="mono">{{ n.po_numbers or '—' }}</span></td>
+              <td><span class="truncate-cell" title="{{ n.load_location }}">{{ n.load_location or '—' }}</span></td>
+              <td style="font-size:12px;white-space:nowrap">{{ n.scheduled_time or '—' }}</td>
+              <td>
+                {% if n.status == 'sent' %}
+                  <span class="badge badge-sent">📤 Wysłano</span>
+                {% elif n.status == 'confirmed' %}
+                  <span class="badge badge-confirmed">✅ Potwierdzone</span>
+                {% elif n.status == 'declined' %}
+                  <span class="badge badge-declined">❌ Odmowa</span>
+                {% else %}
+                  <span class="badge badge-expired">⏰ Wygasłe</span>
+                {% endif %}
+              </td>
+              <td style="font-size:11px;color:var(--muted);white-space:nowrap">
+                {{ (n.sms_sent_at or '')[:16] | replace('T', ' ') or '—' }}
+              </td>
+              <td style="font-size:11px;color:var(--muted);white-space:nowrap">
+                {{ (n.confirmed_at or '')[:16] | replace('T', ' ') or '—' }}
+                {% if n.confirmation_note %}
+                  <br><em style="font-size:10px" title="{{ n.confirmation_note }}">{{ n.confirmation_note[:40] }}…</em>
+                {% endif %}
+              </td>
+              <td>
+                <button type="button" class="btn btn-sm btn-copy btn-icon" title="Kopiuj link potwierdzenia" aria-label="Kopiuj link potwierdzenia"
+                  onclick="copyConfirmLink({{ n.token|tojson }})">🔗</button>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr class="empty-state-row">
+              <td colspan="10">
+                <div style="font-size:36px;margin-bottom:10px">📧</div>
+                <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">Brak powiadomień</div>
+                <div>Wyślij pierwsze powiadomienie do kierowcy.</div>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── SMS SETTINGS (managers only) ────────────────────────────────────────── #}
+  {% if role in ['manager','admin','superuser'] %}
+  <div class="settings-card">
+    <h3>⚙️ Konfiguracja SMS</h3>
+    <div class="form-2col">
+      <div class="form-row">
+        <label>Dostawca SMS</label>
+        <select id="smsProvider" onchange="onProviderChange()">
+          <option value="">— wybierz dostawcę —</option>
+          <option value="textbelt" {% if sms_provider == 'textbelt' %}selected{% endif %}>TextBelt</option>
+          <option value="smsapi"   {% if sms_provider == 'smsapi'   %}selected{% endif %}>SMSAPI.pl</option>
+          <option value="twilio"   {% if sms_provider == 'twilio'   %}selected{% endif %}>Twilio</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Nazwa nadawcy</label>
+        <input type="text" id="smsSender" placeholder="DocCompare" value="{{ sms_provider and 'DocCompare' or '' }}">
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Klucz API / Auth Token</label>
+      <input type="password" id="smsApiKey" placeholder="••••••••••••">
+    </div>
+    <div class="provider-extra" id="twilioExtra">
+      <div class="form-2col">
+        <div class="form-row">
+          <label>Twilio Account SID</label>
+          <input type="text" id="twilioSid" placeholder="ACxxxxxxxxxxxxxxxxx">
+        </div>
+        <div class="form-row">
+          <label>Twilio From Number</label>
+          <input type="text" id="twilioFrom" placeholder="+48xxxxxxxxx">
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <button type="button" class="btn btn-primary" onclick="saveSmsConfig()">💾 Zapisz konfigurację SMS</button>
+      <span id="smsSaveStatus" class="sms-save-status"></span>
+    </div>
+    <div style="margin-top:12px;padding:10px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--muted)">
+      <strong>Wskazówki:</strong> TextBelt — dobry do testów (klucz: <code>textbelt</code> dla 1 SMS/dzień za darmo).
+      SMSAPI.pl — zalecany dla Polski. Twilio — globalny provider.
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   MODAL — DODAJ/EDYTUJ SPEDYTORA
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="modal-overlay" id="fwdModal" role="dialog" aria-modal="true" aria-labelledby="fwdModalTitle">
+  <div class="modal-box">
+    <button type="button" class="modal-close-btn" onclick="closeFwdModal()" aria-label="Zamknij">×</button>
+    <h2 id="fwdModalTitle">Dodaj spedytora</h2>
+    <input type="hidden" id="fwdId">
+
+    <div class="form-2col">
+      <div class="form-row">
+        <label for="fwdName">Nazwa *</label>
+        <input type="text" id="fwdName" placeholder="Jan Kowalski" aria-required="true">
+      </div>
+      <div class="form-row">
+        <label for="fwdCompany">Firma</label>
+        <input type="text" id="fwdCompany" placeholder="Spedycja Kowalski Sp. z o.o.">
+      </div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row">
+        <label for="fwdPhone">Telefon</label>
+        <input type="tel" id="fwdPhone" placeholder="+48 600 000 000">
+      </div>
+      <div class="form-row">
+        <label for="fwdEmail">Email</label>
+        <input type="email" id="fwdEmail" placeholder="jan@spedycja.pl">
+      </div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row">
+        <label for="fwdNip">NIP</label>
+        <input type="text" id="fwdNip" placeholder="1234567890">
+      </div>
+      <div class="form-row">
+        <label for="fwdAddress">Adres</label>
+        <input type="text" id="fwdAddress" placeholder="ul. Transportowa 1, Katowice">
+      </div>
+    </div>
+    <div class="form-row">
+      <label for="fwdNotes">Notatki</label>
+      <textarea id="fwdNotes" placeholder="Dodatkowe informacje..."></textarea>
+    </div>
+    <div class="form-footer">
+      <button type="button" class="btn" onclick="closeFwdModal()">Anuluj</button>
+      <button type="button" class="btn btn-primary" id="fwdSaveBtn" onclick="saveFwd()">Zapisz</button>
+    </div>
+  </div>
+</div>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   MODAL — DODAJ/EDYTUJ KIEROWCĘ
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="modal-overlay" id="drvModal" role="dialog" aria-modal="true" aria-labelledby="drvModalTitle">
+  <div class="modal-box">
+    <button type="button" class="modal-close-btn" onclick="closeDrvModal()" aria-label="Zamknij">×</button>
+    <h2 id="drvModalTitle">Dodaj kierowcę</h2>
+    <input type="hidden" id="drvId">
+
+    <div class="form-2col">
+      <div class="form-row">
+        <label for="drvName">Imię i nazwisko *</label>
+        <input type="text" id="drvName" placeholder="Marek Nowak">
+      </div>
+      <div class="form-row">
+        <label for="drvPhone">Telefon *</label>
+        <input type="tel" id="drvPhone" placeholder="+48 500 000 000">
+      </div>
+    </div>
+    <div class="form-2col">
+      <div class="form-row">
+        <label for="drvPlate">Rejestracja TIR</label>
+        <input type="text" id="drvPlate" placeholder="SZ 12345">
+      </div>
+      <div class="form-row">
+        <label for="drvForwarder">Spedytor</label>
+        <select id="drvForwarder">
+          <option value="">— brak —</option>
+          {% for f in forwarders %}
+          <option value="{{ f.id }}">{{ f.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <label for="drvNotes">Notatki</label>
+      <textarea id="drvNotes" placeholder="Dodatkowe informacje..."></textarea>
+    </div>
+    <div class="form-footer">
+      <button type="button" class="btn" onclick="closeDrvModal()">Anuluj</button>
+      <button type="button" class="btn btn-primary" id="drvSaveBtn" onclick="saveDrv()">Zapisz</button>
+    </div>
+  </div>
+</div>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   MODAL — WYŚLIJ POWIADOMIENIE DO KIEROWCY
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="modal-overlay" id="notifyModal" role="dialog" aria-modal="true" aria-labelledby="notifyModalTitle">
+  <div class="modal-box">
+    <button type="button" class="modal-close-btn" onclick="closeNotifyModal()" aria-label="Zamknij">×</button>
+    <h2 id="notifyModalTitle">📤 Wyślij powiadomienie do kierowcy</h2>
+
+    <div class="form-row">
+      <label for="nmDriver">Kierowca *</label>
+      <select id="nmDriver">
+        <option value="">— Wybierz kierowcę —</option>
+        {% for d in drivers %}
+        <option value="{{ d.id }}">{{ d.name }} — {{ d.phone }}{% if d.truck_plate %} — {{ d.truck_plate }}{% endif %}{% if d.forwarder_name %} ({{ d.forwarder_name }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-2col">
+      <div class="form-row">
+        <label for="nmContainer">Numer kontenera</label>
+        <input type="text" id="nmContainer" placeholder="np. MSCU1234567">
+      </div>
+      <div class="form-row">
+        <label for="nmPo">Numery PO</label>
+        <input type="text" id="nmPo" placeholder="np. PO-2024-001">
+      </div>
+    </div>
+    <div class="form-row">
+      <label for="nmLocation">Miejsce załadunku *</label>
+      <input type="text" id="nmLocation" placeholder="np. Magazyn ACME, ul. Magazynowa 20, Radom">
+    </div>
+    <div class="form-2col">
+      <div class="form-row">
+        <label>Planowana data i godzina</label>
+        <input type="datetime-local" id="nmTime">
+      </div>
+      <div class="form-row">
+        <label>Numer bramy rozładunkowej</label>
+        <input type="text" id="nmGate" placeholder="np. 3" maxlength="10">
+      </div>
+    </div>
+
+    <div class="notify-result" id="nmResult"></div>
+
+    <div class="form-footer">
+      <button type="button" class="btn" onclick="closeNotifyModal()">Zamknij</button>
+      <button type="button" class="btn btn-primary" id="nmSendBtn" onclick="sendNotify()">📤 Wyślij SMS</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+const _appBaseUrl = window.location.origin;
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+function showTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('pane-' + name).classList.add('active');
+}
+
+// ── FORWARDER MODAL ───────────────────────────────────────────────────────────
+function openFwdModal() {
+  document.getElementById('fwdId').value = '';
+  document.getElementById('fwdModalTitle').textContent = 'Dodaj spedytora';
+  ['fwdName','fwdCompany','fwdPhone','fwdEmail','fwdNip','fwdAddress','fwdNotes'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('fwdModal').classList.add('open');
+  setTimeout(() => document.getElementById('fwdName').focus(), 80);
+}
+function openFwdEditModal(f) {
+  document.getElementById('fwdId').value      = f.id;
+  document.getElementById('fwdModalTitle').textContent = 'Edytuj spedytora';
+  document.getElementById('fwdName').value    = f.name || '';
+  document.getElementById('fwdCompany').value = f.company || '';
+  document.getElementById('fwdPhone').value   = f.phone || '';
+  document.getElementById('fwdEmail').value   = f.email || '';
+  document.getElementById('fwdNip').value     = f.nip || '';
+  document.getElementById('fwdAddress').value = f.address || '';
+  document.getElementById('fwdNotes').value   = f.notes || '';
+  document.getElementById('fwdModal').classList.add('open');
+}
+function closeFwdModal() { document.getElementById('fwdModal').classList.remove('open'); }
+
+async function saveFwd() {
+  const id   = document.getElementById('fwdId').value;
+  const name = document.getElementById('fwdName').value.trim();
+  if (!name) { toast('Nazwa jest wymagana', 'error'); return; }
+  const body = {
+    name,
+    company: document.getElementById('fwdCompany').value.trim(),
+    phone:   document.getElementById('fwdPhone').value.trim(),
+    email:   document.getElementById('fwdEmail').value.trim(),
+    nip:     document.getElementById('fwdNip').value.trim(),
+    address: document.getElementById('fwdAddress').value.trim(),
+    notes:   document.getElementById('fwdNotes').value.trim(),
+  };
+  const btn = document.getElementById('fwdSaveBtn');
+  btn.disabled = true; btn.textContent = 'Zapisywanie…';
+  try {
+    const url    = id ? `/api/transport/forwarders/${id}` : '/api/transport/forwarders';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, {method, headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrf()}, body: JSON.stringify(body)});
+    const data = await res.json();
+    if (!res.ok || data.error) { toast(data.error || 'Błąd zapisu', 'error'); return; }
+    toast(id ? 'Zaktualizowano spedytora' : 'Dodano spedytora', 'ok');
+    closeFwdModal();
+    setTimeout(() => location.reload(), 500);
+  } catch(e) { toast('Błąd sieci', 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Zapisz'; }
+}
+
+// ── DRIVER MODAL ──────────────────────────────────────────────────────────────
+function openDrvModal() {
+  document.getElementById('drvId').value = '';
+  document.getElementById('drvModalTitle').textContent = 'Dodaj kierowcę';
+  ['drvName','drvPhone','drvPlate','drvNotes'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('drvForwarder').value = '';
+  document.getElementById('drvModal').classList.add('open');
+  setTimeout(() => document.getElementById('drvName').focus(), 80);
+}
+function openDrvEditModal(d) {
+  document.getElementById('drvId').value        = d.id;
+  document.getElementById('drvModalTitle').textContent = 'Edytuj kierowcę';
+  document.getElementById('drvName').value      = d.name || '';
+  document.getElementById('drvPhone').value     = d.phone || '';
+  document.getElementById('drvPlate').value     = d.truck_plate || '';
+  document.getElementById('drvForwarder').value = d.forwarder_id || '';
+  document.getElementById('drvNotes').value     = d.notes || '';
+  document.getElementById('drvModal').classList.add('open');
+}
+function closeDrvModal() { document.getElementById('drvModal').classList.remove('open'); }
+
+async function saveDrv() {
+  const id    = document.getElementById('drvId').value;
+  const name  = document.getElementById('drvName').value.trim();
+  const phone = document.getElementById('drvPhone').value.trim();
+  if (!name || !phone) { toast('Imię i telefon są wymagane', 'error'); return; }
+  const body = {
+    name, phone,
+    truck_plate:  document.getElementById('drvPlate').value.trim(),
+    forwarder_id: document.getElementById('drvForwarder').value || null,
+    notes:        document.getElementById('drvNotes').value.trim(),
+  };
+  const btn = document.getElementById('drvSaveBtn');
+  btn.disabled = true; btn.textContent = 'Zapisywanie…';
+  try {
+    const url    = id ? `/api/transport/drivers/${id}` : '/api/transport/drivers';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, {method, headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrf()}, body: JSON.stringify(body)});
+    const data = await res.json();
+    if (!res.ok || data.error) { toast(data.error || 'Błąd zapisu', 'error'); return; }
+    toast(id ? 'Zaktualizowano kierowcę' : 'Dodano kierowcę', 'ok');
+    closeDrvModal();
+    setTimeout(() => location.reload(), 500);
+  } catch(e) { toast('Błąd sieci', 'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Zapisz'; }
+}
+
+// ── NOTIFY MODAL ──────────────────────────────────────────────────────────────
+function openNotifyModal() {
+  ['nmContainer','nmPo','nmLocation','nmTime','nmGate'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('nmDriver').value = '';
+  const resultEl = document.getElementById('nmResult');
+  resultEl.style.display = 'none';
+  resultEl.className = 'notify-result';
+  const btn = document.getElementById('nmSendBtn');
+  btn.disabled = false; btn.textContent = '📤 Wyślij SMS';
+  document.getElementById('notifyModal').classList.add('open');
+}
+function closeNotifyModal() { document.getElementById('notifyModal').classList.remove('open'); }
+
+async function sendNotify() {
+  const driverId = document.getElementById('nmDriver').value;
+  const location = document.getElementById('nmLocation').value.trim();
+  if (!driverId) { toast('Wybierz kierowcę', 'error'); return; }
+  if (!location) { toast('Podaj miejsce załadunku', 'error'); return; }
+  const body = {
+    driver_id:        parseInt(driverId),
+    container_number: document.getElementById('nmContainer').value.trim(),
+    po_numbers:       document.getElementById('nmPo').value.trim(),
+    load_location:    location,
+    scheduled_time:   document.getElementById('nmTime').value,
+    gate_number:      document.getElementById('nmGate').value.trim(),
+  };
+  const btn = document.getElementById('nmSendBtn');
+  btn.disabled = true; btn.textContent = '⏳ Wysyłanie…';
+  try {
+    const res  = await fetch('/api/transport/notify-driver', {
+      method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrf()}, body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    const resultEl = document.getElementById('nmResult');
+    resultEl.style.display = 'block';
+    const escH = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    if (data.sms_sent) {
+      resultEl.className = 'notify-result ok';
+      resultEl.innerHTML = `✅ SMS wysłany do <strong>${escH(data.driver_name)}</strong> (${escH(data.driver_phone)})
+        <div class="notify-url">🔗 <a href="${escH(data.confirm_url)}" target="_blank" rel="noopener noreferrer">${escH(data.confirm_url)}</a></div>`;
+      toast('SMS wysłany pomyślnie', 'ok');
+      btn.textContent = '✓ Wysłano';
+    } else {
+      resultEl.className = 'notify-result warn';
+      let msg = `⚠️ Powiadomienie zapisane, ale SMS nie wysłany.`;
+      if (data.sms_error) msg += `<br><small>${escH(data.sms_error)}</small>`;
+      if (data.confirm_url) msg += `<div class="notify-url">🔗 Link do wysłania ręcznie: <a href="${escH(data.confirm_url)}" target="_blank" rel="noopener noreferrer">${escH(data.confirm_url)}</a></div>`;
+      resultEl.innerHTML = msg;
+      toast(escH(data.sms_error) || 'SMS nie wysłany', 'warn');
+      btn.disabled = false; btn.textContent = '📤 Wyślij SMS';
+    }
+  } catch(e) {
+    toast('Błąd sieci: ' + e.message, 'error');
+    btn.disabled = false; btn.textContent = '📤 Wyślij SMS';
+  }
+}
+
+// ── COPY CONFIRM LINK ─────────────────────────────────────────────────────────
+function copyConfirmLink(token) {
+  const url = `${_appBaseUrl}/transport/confirm/${token}`;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url)
+      .then(() => toast('Link skopiowany do schowka', 'ok'))
+      .catch(() => prompt('Skopiuj link:', url));
+  } else {
+    prompt('Skopiuj link:', url);
+  }
+}
+
+// ── SMS CONFIG ────────────────────────────────────────────────────────────────
+function onProviderChange() {
+  const el = document.getElementById('smsProvider');
+  if (!el) return;
+  const v = el.value;
+  const extra = document.getElementById('twilioExtra');
+  if (extra) extra.classList.toggle('open', v === 'twilio');
+}
+
+async function saveSmsConfig() {
+  const smsProviderEl = document.getElementById('smsProvider');
+  if (!smsProviderEl) return;
+  const provider = smsProviderEl.value;
+  const apiKey   = document.getElementById('smsApiKey').value;
+  const sender   = document.getElementById('smsSender').value.trim();
+  const sid      = document.getElementById('twilioSid')  ? document.getElementById('twilioSid').value.trim()  : '';
+  const from     = document.getElementById('twilioFrom') ? document.getElementById('twilioFrom').value.trim() : '';
+
+  const body = { provider, api_key: apiKey, sender, twilio_sid: sid, twilio_from: from };
+  const statusEl = document.getElementById('smsSaveStatus');
+  statusEl.textContent = ''; statusEl.className = 'sms-save-status';
+
+  try {
+    const res  = await fetch('/api/transport/sms-config', {
+      method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrf()}, body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      statusEl.textContent = '✅ Konfiguracja zapisana';
+      statusEl.className = 'sms-save-status ok';
+      toast('Konfiguracja SMS zapisana', 'ok');
+    } else {
+      statusEl.textContent = '❌ ' + (data.error || 'Błąd');
+      statusEl.className = 'sms-save-status error';
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 4000);
+  } catch(e) {
+    statusEl.textContent = '❌ Błąd sieci';
+    statusEl.className = 'sms-save-status error';
+  }
+}
+
+// ── BACKDROP CLOSE ────────────────────────────────────────────────────────────
+['fwdModal','drvModal','notifyModal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+});
+
+// Init provider visibility on load
+onProviderChange();
+
+// ── DELETE FORWARDER (admin only) ─────────────────────────────────────────────
+async function deleteForwarder(id, name) {
+  if (!confirm(`Usunąć spedytora "${name}"? Tej operacji nie można cofnąć.`)) return;
+  try {
+    const r = await fetch('/api/transport/forwarders/' + id, {
+      method: 'DELETE', headers: { 'X-CSRF-Token': getCsrf() }
+    });
+    const d = await r.json();
+    if (!r.ok) { toast(d.error || 'Błąd usuwania', 'error'); return; }
+    toast('Spedytor usunięty', 'ok');
+    setTimeout(() => location.reload(), 600);
+  } catch (e) { toast('Błąd połączenia', 'error'); }
+}
+
+// ── DELETE DRIVER (admin only) ────────────────────────────────────────────────
+async function deleteDriver(id, name) {
+  if (!confirm(`Usunąć kierowcę "${name}"? Tej operacji nie można cofnąć.`)) return;
+  try {
+    const r = await fetch('/api/transport/drivers/' + id, {
+      method: 'DELETE', headers: { 'X-CSRF-Token': getCsrf() }
+    });
+    const d = await r.json();
+    if (!r.ok) { toast(d.error || 'Błąd usuwania', 'error'); return; }
+    toast('Kierowca usunięty', 'ok');
+    setTimeout(() => location.reload(), 600);
+  } catch (e) { toast('Błąd połączenia', 'error'); }
+}
+</script>
+{% endblock %}

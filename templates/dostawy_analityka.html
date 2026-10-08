@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Panel analityczny — Dostawy{% endblock %}
+
+{% block extra_head %}
+<style>
+.an-kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.an-kpi-val{font-size:22px;font-weight:800;color:var(--accent);font-family:var(--mono)}
+.an-kpi-lbl{font-size:11px;color:var(--muted);margin-top:2px}
+[x-cloak]{display:none!important}
+</style>
+{% endblock %}
+
+{% block page_title %}Panel analityczny{% endblock %}
+
+{% block content %}
+<div x-data="deliveryAnalytics()" x-init="load()" x-cloak>
+  <div class="page-header" style="display:flex;align-items:center;gap:10px">
+    <h1 style="margin:0">📊 Panel analityczny — dostawy przychodzące</h1>
+    <span x-show="loading" style="font-size:12px;color:var(--muted)">ładowanie…</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:12px 0 18px">
+    <div class="an-kpi"><div class="an-kpi-val" x-text="data.total ?? '—'"></div><div class="an-kpi-lbl">Wszystkie dostawy</div></div>
+    <div class="an-kpi"><div class="an-kpi-val" x-text="data.lead_time ? (data.lead_time.avg + ' dni') : '—'"></div><div class="an-kpi-lbl">Śr. lead time (utworzenie→magazyn)</div></div>
+    <div class="an-kpi"><div class="an-kpi-val" x-text="data.lead_time ? (data.lead_time.median + ' dni') : '—'"></div><div class="an-kpi-lbl">Mediana lead time</div></div>
+    <div class="an-kpi"><div class="an-kpi-val" x-text="data.lead_time ? (data.lead_time.count) : '0'"></div><div class="an-kpi-lbl">Dostaw w magazynie (próbka)</div></div>
+  </div>
+
+  {# Rozkład faz #}
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Rozkład faz</div>
+    <template x-for="p in (data.phases||[])" :key="p.label">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <div style="width:140px;font-size:12px" x-text="p.label"></div>
+        <div style="flex:1;background:var(--bg,#f1f5f9);border-radius:6px;height:16px;overflow:hidden">
+          <div style="height:100%;background:var(--accent,#2563eb)" :style="'width:'+(data.total? Math.round(p.count*100/data.total):0)+'%'"></div>
+        </div>
+        <div style="width:42px;text-align:right;font-size:12px;font-weight:700" x-text="p.count"></div>
+      </div>
+    </template>
+  </div>
+
+  {# Zamówiony asortyment + model „na ile wystarczy" #}
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--muted)">Asortyment — zamówienia, stan i „na ile wystarczy"</div>
+      <a href="/warehouse/stock" style="font-size:12px">Stany magazynu (import) →</a>
+    </div>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:920px">
+      <thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase">
+        <th style="padding:6px 8px">REF</th><th style="padding:6px 8px">Opis</th>
+        <th style="padding:6px 8px;text-align:right">W drodze</th>
+        <th style="padding:6px 8px;text-align:right">Stan</th>
+        <th style="padding:6px 8px;text-align:right">Zużycie/mies</th>
+        <th style="padding:6px 8px;text-align:right" title="W dostawach wychodzących">Wych. dost.</th>
+        <th style="padding:6px 8px;text-align:right" title="Zlecenia wychodzące — potwierdzone">Wych. potw.</th>
+        <th style="padding:6px 8px;text-align:right" title="Zlecenia wychodzące — niepotwierdzone (backorder)">Wych. niepotw.</th>
+        <th style="padding:6px 8px;text-align:right" title="Stan + w drodze − wych. w dostawach − wych. potwierdzone">Saldo</th>
+        <th style="padding:6px 8px;text-align:right">Na ile dni</th></tr></thead>
+      <tbody>
+        <template x-for="a in (data.assortment||[])" :key="a.ref">
+          <tr style="border-top:1px solid var(--border)">
+            <td style="padding:6px 8px;font-family:var(--mono);font-weight:600" x-text="a.ref"></td>
+            <td style="padding:6px 8px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="a.opis"></td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--mono)" x-text="a.incoming? a.incoming.toLocaleString('pl-PL'):'—'"></td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--mono)" x-text="(a.on_hand!=null)? a.on_hand.toLocaleString('pl-PL'):'—'"></td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--mono)" x-text="(a.monthly_usage!=null && a.monthly_usage>0)? a.monthly_usage.toLocaleString('pl-PL'):'—'"></td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--mono)" x-text="a.out_deliveries? a.out_deliveries.toLocaleString('pl-PL'):'—'"></td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--mono)" x-text="a.out_confirmed? a.out_confirmed.toLocaleString('pl-PL'):'—'"></td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:#b45309" x-text="a.out_unconfirmed? a.out_unconfirmed.toLocaleString('pl-PL'):'—'"></td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700"
+                :style="(a.balance!=null && a.balance<0)?'color:#dc2626':''"
+                x-text="(a.balance!=null)? a.balance.toLocaleString('pl-PL'):'—'"></td>
+            <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:800"
+                :style="(a.days_cover!=null && a.days_cover<30)?'color:#dc2626':((a.days_cover!=null && a.days_cover<60)?'color:#b45309':'')"
+                x-text="(a.days_cover!=null)? (a.days_cover.toLocaleString('pl-PL')+' dni'):'—'"></td>
+          </tr>
+        </template>
+        <template x-if="!(data.assortment||[]).length">
+          <tr><td colspan="10" style="padding:14px;text-align:center;color:var(--muted);font-style:italic">Brak pozycji</td></tr>
+        </template>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  {# Brak danych o stanie magazynu → podpowiedź importu #}
+  <div x-show="data.warehouse_stock_available===false" style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px;color:#92400e;font-size:13px">
+    <b>📦 „Na ile wystarczy" — brak stanów magazynu.</b>
+    Zaimportuj plik (REF + stan + zużycie miesięczne) w
+    <a href="/warehouse/stock" style="color:#92400e;font-weight:700;text-decoration:underline">Stany magazynu</a>,
+    a kolumny „Stan / Na ile dni" policzą się jako (zapas + w drodze) ÷ zużycie.
+  </div>
+</div>
+
+<script>
+function deliveryAnalytics() {
+  return {
+    open: true, loading: false, data: {},
+    async load() {
+      this.loading = true;
+      try { const r = await fetch('/api/dostawy/analytics'); this.data = await r.json(); }
+      catch(_) {}
+      finally { this.loading = false; }
+    },
+  };
+}
+</script>
+{% endblock %}

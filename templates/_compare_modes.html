@@ -1,0 +1,19 @@
+{# Wspólny przełącznik trybów porównania — wpinany na /compare, /table, /typo, /analyze.
+   Strony zostają osobne (różne silniki), ale użytkownik ma jeden, czytelny przełącznik. #}
+<style>
+.cmp-modes{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.cmp-mode{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:999px;
+  font-size:13px;font-weight:600;text-decoration:none;color:var(--muted,#64748b);
+  background:var(--surface,#fff);border:1px solid var(--border,#e2e8f0);
+  transition:background .15s,color .15s,border-color .15s}
+.cmp-mode:hover{border-color:var(--accent,#2563eb);color:var(--accent,#2563eb)}
+.cmp-mode.active{background:var(--accent,#2563eb);border-color:var(--accent,#2563eb);color:#fff}
+.cmp-mode.analyze{border-style:dashed}
+.cmp-mode.analyze.active{border-style:solid}
+</style>
+<div class="cmp-modes" role="tablist" aria-label="Tryb porównania">
+  <a href="/compare" class="cmp-mode {% if request.path=='/compare' %}active{% endif %}" title="Porównanie dokumentów (PO/PI, CI/PL…)">📄 Dokumenty</a>
+  <a href="/table"   class="cmp-mode {% if request.path=='/table' %}active{% endif %}" title="Porównanie tabel / pozycji">📊 Tabele</a>
+  <a href="/typo"    class="cmp-mode {% if request.path=='/typo' %}active{% endif %}" title="Wykrywanie literówek / OCR (I↔1, O↔0)">🔤 Literówki</a>
+  <a href="/analyze" class="cmp-mode analyze {% if request.path=='/analyze' %}active{% endif %}" title="Wszystkie silniki naraz — jeden raport">✨ Wszystko naraz</a>
+</div>

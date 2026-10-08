@@ -1,0 +1,590 @@
+{% extends "base.html" %}
+{% block title %}Porównanie dokumentów{% endblock %}
+
+{% block breadcrumb %}
+<div class="min-w-0 flex items-center gap-2 text-[13px] text-slate-400">
+  <a href="/home" class="hover:text-slate-600">Zakupy</a>
+  <span>/</span>
+  <span class="text-[15px] font-semibold text-slate-900">Porównanie dokumentów</span>
+</div>
+{% endblock %}
+
+{% block alpine_init %}compareApp(){% endblock %}
+{% block main_class %}{% endblock %}
+
+{% block content %}
+<div class="max-w-[1180px] mx-auto px-4 md:px-7 py-6 md:py-8">
+
+  {% include '_compare_modes.html' %}
+
+  {# ── Page header ── #}
+  <div class="flex items-start justify-between gap-4 mb-6 animate-fadeup">
+    <div>
+      <h1 class="text-[22px] font-bold text-slate-900 tracking-tight">Porównanie dokumentów</h1>
+      <p class="text-[14px] text-slate-500 mt-1">Wgraj dwa pliki PDF, wybierz typ dokumentu i uruchom analizę różnic.</p>
+    </div>
+    <button type="button" x-show="stage==='result'" @click="reset()" class="btn btn-ghost shrink-0">
+      <i data-lucide="rotate-ccw" aria-hidden="true"></i> Nowe porównanie
+    </button>
+  </div>
+
+  {# ── UPLOAD FORM ── #}
+  <div x-show="stage!=='result'" class="card p-5 md:p-6 animate-fadeup">
+    <div class="grid md:grid-cols-2 gap-4">
+
+      {# File A #}
+      <div>
+        <span class="field-label">Dokument A <span class="text-slate-400 font-normal">— źródłowy (np. PO)</span></span>
+        <div class="dropzone p-6 text-center cursor-pointer"
+             :class="{ 'is-over': overA, 'has-file': fileA }"
+             @click="pickFile('A')"
+             @dragover.prevent="overA=true"
+             @dragleave="overA=false"
+             @drop.prevent="onDrop($event,'A')"
+             role="button" tabindex="0" aria-label="Wgraj Dokument A — kliknij lub przeciągnij plik PDF"
+             @keydown.enter.prevent="pickFile('A')" @keydown.space.prevent="pickFile('A')">
+          <input type="file" id="fileInputA" accept=".pdf" class="sr-only" @change="onFileChange($event,'A')">
+          <template x-if="!fileA">
+            <div>
+              <div class="w-11 h-11 rounded-xl bg-slate-100 grid place-items-center mx-auto mb-2.5">
+                <i data-lucide="upload-cloud" class="text-slate-400" style="width:22px;height:22px;" aria-hidden="true"></i>
+              </div>
+              <div class="text-[13.5px] font-semibold text-slate-700">Przeciągnij plik lub kliknij</div>
+              <div class="text-[12px] text-slate-400 mt-0.5">PDF do 25 MB</div>
+            </div>
+          </template>
+          <template x-if="fileA">
+            <div class="flex items-center gap-3 text-left">
+              <div class="w-10 h-12 rounded-lg bg-white border border-slate-200 grid place-items-center shrink-0">
+                <i data-lucide="file-text" class="text-red-500" style="width:20px;height:20px;" aria-hidden="true"></i>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[13.5px] font-semibold text-slate-800 truncate" x-text="fileA.name"></div>
+                <div class="text-[12px] text-slate-400" x-text="formatSize(fileA.size)"></div>
+              </div>
+              <button type="button" @click.stop="clearFile('A')" class="btn-icon btn-subtle" aria-label="Usuń plik A">
+                <i data-lucide="x" style="width:16px;height:16px;" aria-hidden="true"></i>
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      {# File B #}
+      <div>
+        <span class="field-label">Dokument B <span class="text-slate-400 font-normal">— porównywany (np. PI/CI)</span></span>
+        <div class="dropzone p-6 text-center cursor-pointer"
+             :class="{ 'is-over': overB, 'has-file': fileB }"
+             @click="pickFile('B')"
+             @dragover.prevent="overB=true"
+             @dragleave="overB=false"
+             @drop.prevent="onDrop($event,'B')"
+             role="button" tabindex="0" aria-label="Wgraj Dokument B — kliknij lub przeciągnij plik PDF"
+             @keydown.enter.prevent="pickFile('B')" @keydown.space.prevent="pickFile('B')">
+          <input type="file" id="fileInputB" accept=".pdf" class="sr-only" @change="onFileChange($event,'B')">
+          <template x-if="!fileB">
+            <div>
+              <div class="w-11 h-11 rounded-xl bg-slate-100 grid place-items-center mx-auto mb-2.5">
+                <i data-lucide="upload-cloud" class="text-slate-400" style="width:22px;height:22px;" aria-hidden="true"></i>
+              </div>
+              <div class="text-[13.5px] font-semibold text-slate-700">Przeciągnij plik lub kliknij</div>
+              <div class="text-[12px] text-slate-400 mt-0.5">PDF do 25 MB</div>
+            </div>
+          </template>
+          <template x-if="fileB">
+            <div class="flex items-center gap-3 text-left">
+              <div class="w-10 h-12 rounded-lg bg-white border border-slate-200 grid place-items-center shrink-0">
+                <i data-lucide="file-text" class="text-red-500" style="width:20px;height:20px;" aria-hidden="true"></i>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[13.5px] font-semibold text-slate-800 truncate" x-text="fileB.name"></div>
+                <div class="text-[12px] text-slate-400" x-text="formatSize(fileB.size)"></div>
+              </div>
+              <button type="button" @click.stop="clearFile('B')" class="btn-icon btn-subtle" aria-label="Usuń plik B">
+                <i data-lucide="x" style="width:16px;height:16px;" aria-hidden="true"></i>
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    {# Type selectors + run #}
+    <div class="flex flex-col md:flex-row md:items-end gap-4 mt-5 pt-5 border-t" style="border-color:var(--line);">
+      <div class="md:w-[200px]">
+        <label class="field-label" for="typeASelect">Typ dok. A</label>
+        <select class="select" id="typeASelect" x-model="typeA" aria-label="Typ dokumentu A">
+          <option value="auto">❓ Auto</option>
+          <option value="PO">PO — Zamówienie</option>
+          <option value="PI">PI — Proforma</option>
+          <option value="CI">CI — Faktura handlowa</option>
+          <option value="PL">PL — Packing list</option>
+          <option value="SAD">SAD — Dok. celny</option>
+          <option value="BL">BL — Konosament</option>
+          <option value="WZ">WZ — Wydanie zewn.</option>
+          <option value="FV">FV — Faktura</option>
+          <option value="CMR">CMR — List przewozowy</option>
+        </select>
+      </div>
+      <div class="md:w-[200px]">
+        <label class="field-label" for="typeBSelect">Typ dok. B</label>
+        <select class="select" id="typeBSelect" x-model="typeB" aria-label="Typ dokumentu B">
+          <option value="auto">❓ Auto</option>
+          <option value="PO">PO — Zamówienie</option>
+          <option value="PI">PI — Proforma</option>
+          <option value="CI">CI — Faktura handlowa</option>
+          <option value="PL">PL — Packing list</option>
+          <option value="SAD">SAD — Dok. celny</option>
+          <option value="BL">BL — Konosament</option>
+          <option value="WZ">WZ — Wydanie zewn.</option>
+          <option value="FV">FV — Faktura</option>
+          <option value="CMR">CMR — List przewozowy</option>
+        </select>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer text-[13px] text-slate-600 md:pb-1.5">
+        <input type="checkbox" x-model="useAI" class="w-4 h-4 rounded" style="accent-color:var(--accent);">
+        <span>🤖 Walidacja AI</span>
+        <span class="chip chip-info" style="font-size:11px;">+10–15s</span>
+      </label>
+      <div class="flex-1"></div>
+      <button type="button" class="btn btn-primary px-6 h-[42px]" :disabled="!ready" @click="compare()">
+        <i data-lucide="git-compare-arrows" aria-hidden="true"></i> Porównaj dokumenty
+      </button>
+    </div>
+    <p x-show="!ready" class="text-[12.5px] text-slate-400 mt-3 flex items-center gap-1.5">
+      <i data-lucide="info" style="width:14px;height:14px;" aria-hidden="true"></i> Wgraj oba dokumenty, aby uruchomić porównanie.
+    </p>
+  </div>
+
+  {# ── LOADING ── #}
+  <div x-show="stage==='loading'" class="card p-10 mt-5 text-center animate-fadein">
+    <div class="w-12 h-12 rounded-full border-[3px] border-slate-200 border-t-blue-600 mx-auto spin-anim"></div>
+    <div class="text-[15px] font-semibold text-slate-800 mt-4">Analiza dokumentów…</div>
+    <div class="text-[13px] text-slate-500 mt-2 space-y-1">
+      <div :class="loadStep>=1?'text-emerald-600 font-medium':''">
+        <span x-show="loadStep>=1">✓ </span>Ekstrakcja pól z PDF
+      </div>
+      <div :class="loadStep>=2?'text-emerald-600 font-medium':''">
+        <span x-show="loadStep>=2">✓ </span>Dopasowanie pozycji i kwot
+      </div>
+      <div :class="loadStep>=3?'text-emerald-600 font-medium':''">
+        <span x-show="loadStep>=3">✓ </span>Ocena ryzyka<span x-show="useAI"> (AI)</span>
+      </div>
+    </div>
+  </div>
+
+  {# ── RESULTS ── #}
+  <div x-show="stage==='result'" x-cloak class="mt-1">
+
+    {# Error banner #}
+    <div x-show="apiError" class="card p-4 mb-5 animate-fadeup" style="background:#fef2f2;border-color:#fecaca;">
+      <div class="flex items-center gap-2 text-[13.5px] text-red-700 font-medium">
+        <i data-lucide="alert-octagon" style="width:16px;height:16px;" aria-hidden="true"></i>
+        <span x-text="apiError"></span>
+      </div>
+    </div>
+
+    {# Summary row #}
+    <div class="grid lg:grid-cols-[260px_1fr] gap-5 mb-5 stagger">
+
+      {# Risk Score Gauge #}
+      <div class="card p-5 flex flex-col items-center justify-center">
+        <div class="divlabel mb-3">AI Risk Score</div>
+        <div class="relative w-[140px] h-[140px]">
+          <svg viewBox="0 0 120 120" class="w-full h-full -rotate-90">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="#eef2f8" stroke-width="11"></circle>
+            <circle cx="60" cy="60" r="52" fill="none"
+                    :stroke="riskColor" stroke-width="11" stroke-linecap="round"
+                    :stroke-dasharray="circ" :stroke-dashoffset="dashoffset"
+                    style="transition:stroke-dashoffset 1s cubic-bezier(.22,.61,.36,1)"></circle>
+          </svg>
+          <div class="absolute inset-0 grid place-items-center text-center">
+            <div>
+              <div class="kpi-num text-[36px] font-bold leading-none" :style="`color:${riskColor}`" x-text="score"></div>
+              <div class="text-[11px] text-slate-400 font-medium">/ 100</div>
+            </div>
+          </div>
+        </div>
+        <div class="chip mt-3" :class="score>=67?'chip-err':score>=34?'chip-warn':'chip-ok'">
+          <span class="dot"></span>
+          <span x-text="score>=67?'Wysokie ryzyko':score>=34?'Średnie ryzyko':'Niskie ryzyko'"></span>
+        </div>
+      </div>
+
+      {# Counters + meta #}
+      <div class="card p-5 flex flex-col">
+        <div class="grid grid-cols-3 gap-3">
+          <div class="rounded-xl border p-3.5" style="border-color:#fecaca;background:#fef4f4;">
+            <div class="flex items-center gap-1.5 text-[12px] font-semibold text-red-700">
+              <i data-lucide="alert-octagon" style="width:13px;height:13px;" aria-hidden="true"></i> Błędy
+            </div>
+            <div class="kpi-num text-[28px] font-bold text-red-600 mt-1" x-text="result.total_errors||0"></div>
+          </div>
+          <div class="rounded-xl border p-3.5" style="border-color:#fde68a;background:#fffaf0;">
+            <div class="flex items-center gap-1.5 text-[12px] font-semibold text-amber-700">
+              <i data-lucide="alert-triangle" style="width:13px;height:13px;" aria-hidden="true"></i> Ostrzeżenia
+            </div>
+            <div class="kpi-num text-[28px] font-bold text-amber-600 mt-1" x-text="result.total_warnings||0"></div>
+          </div>
+          <div class="rounded-xl border p-3.5" style="border-color:#a7f3d0;background:#f0fdf6;">
+            <div class="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
+              <i data-lucide="check-circle-2" style="width:13px;height:13px;" aria-hidden="true"></i> Zgodne
+            </div>
+            <div class="kpi-num text-[28px] font-bold text-emerald-600 mt-1" x-text="result.total_ok||0"></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 mt-4 pt-4 border-t" style="border-color:var(--line);">
+          <div>
+            <div class="divlabel">Typ</div>
+            <div class="text-[13px] font-semibold text-slate-800 mt-0.5"
+                 x-text="(result.doc_type_a&&result.doc_type_a!=='auto'?result.doc_type_a:'?')+' ↔ '+(result.doc_type_b&&result.doc_type_b!=='auto'?result.doc_type_b:result.doc_type_detected||'?')">
+            </div>
+          </div>
+          <div>
+            <div class="divlabel">Dostawca</div>
+            <div class="text-[13px] font-semibold text-slate-800 mt-0.5 truncate"
+                 x-text="result.supplier_code||result.supplier_name||'—'"></div>
+          </div>
+          <div>
+            <div class="divlabel">Pól w tabeli</div>
+            <div class="text-[13px] font-semibold text-slate-800 mt-0.5" x-text="diffs.length"></div>
+          </div>
+          <div x-show="result.comparison_id">
+            <div class="divlabel">ID</div>
+            <div class="text-[13px] font-semibold text-slate-800 mt-0.5 tnum" x-text="'#'+(result.comparison_id||'')"></div>
+          </div>
+        </div>
+
+        <div class="flex-1"></div>
+        <div class="flex flex-wrap gap-2 mt-4">
+          <a :href="result.comparison_id?'/api/export/pdf/'+result.comparison_id:'#'"
+             :class="result.comparison_id?'':'opacity-40 pointer-events-none'"
+             class="btn btn-ghost btn-sm" target="_blank" rel="noopener noreferrer">
+            <i data-lucide="file-down" aria-hidden="true"></i> Eksport PDF
+          </a>
+          <a :href="result.comparison_id?'/api/export/excel/'+result.comparison_id:'#'"
+             :class="result.comparison_id?'':'opacity-40 pointer-events-none'"
+             class="btn btn-ghost btn-sm" target="_blank" rel="noopener noreferrer">
+            <i data-lucide="sheet" aria-hidden="true"></i> Eksport Excel
+          </a>
+          <a href="/history" class="btn btn-subtle btn-sm">
+            <i data-lucide="history" aria-hidden="true"></i> Historia
+          </a>
+        </div>
+      </div>
+    </div>
+
+    {# AI validation box #}
+    <template x-if="result.ai_validation && result.ai_validation.summary">
+      <div class="card p-4 mb-5 animate-fadeup" style="background:rgba(239,246,255,.6);border-color:#bfdbfe;">
+        <div class="flex items-start gap-3">
+          <i data-lucide="sparkles" class="text-blue-500 mt-0.5 shrink-0" style="width:16px;height:16px;" aria-hidden="true"></i>
+          <div class="min-w-0">
+            <div class="text-[12px] font-semibold text-blue-700 uppercase tracking-wide mb-1">Ocena AI</div>
+            <div class="text-[13.5px] text-slate-700 leading-relaxed" x-text="result.ai_validation.summary"></div>
+            <template x-if="result.ai_validation.critical_issues && result.ai_validation.critical_issues.length">
+              <div class="mt-2 space-y-1">
+                <template x-for="issue in result.ai_validation.critical_issues" :key="issue">
+                  <div class="text-[13px] text-red-700 flex items-start gap-1.5">
+                    <i data-lucide="alert-octagon" class="shrink-0 mt-0.5" style="width:13px;height:13px;" aria-hidden="true"></i>
+                    <span x-text="issue"></span>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    {# Diffs table #}
+    <div class="card overflow-hidden animate-fadeup">
+      <div class="flex items-center justify-between px-4 py-3.5 border-b flex-wrap gap-2" style="border-color:var(--line);">
+        <h2 class="text-[14px] font-semibold text-slate-800 flex items-center gap-2">
+          <i data-lucide="table-2" class="text-slate-400" style="width:16px;height:16px;" aria-hidden="true"></i>
+          Tabela różnic
+          <span class="text-slate-400 font-normal" x-text="'('+diffs.length+')'"></span>
+        </h2>
+        <div class="flex items-center gap-3 text-[12px] text-slate-500">
+          <span class="flex items-center gap-1.5"><span class="inline-block w-2.5 h-2.5 rounded-sm" style="background:#ef4444"></span> Błąd</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-2.5 h-2.5 rounded-sm" style="background:#f59e0b"></span> Ostrzeżenie</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-2.5 h-2.5 rounded-sm" style="background:#10b981"></span> Zgodne</span>
+        </div>
+      </div>
+
+      <template x-if="diffs.length===0">
+        <div class="py-12 text-center">
+          <i data-lucide="check-circle-2" class="text-emerald-400 mx-auto mb-2" style="width:32px;height:32px;" aria-hidden="true"></i>
+          <div class="text-[14px] font-semibold text-slate-600">Brak rozbieżności</div>
+          <div class="text-[13px] text-slate-400 mt-0.5">Dokumenty są zgodne we wszystkich sprawdzonych polach.</div>
+        </div>
+      </template>
+
+      <template x-if="diffs.length>0">
+        <div class="overflow-x-auto scroll-thin">
+          <table class="tbl min-w-[680px]">
+            <thead><tr>
+              <th scope="col" style="width:34px"></th>
+              <th scope="col">Pole</th>
+              <th scope="col">Wartość A</th>
+              <th scope="col">Wartość B</th>
+              <th scope="col">Status</th>
+              <th scope="col" style="width:44px"></th>
+            </tr></thead>
+            <tbody>
+              <template x-for="(d,i) in diffs" :key="i">
+                <tr :class="rowCls(d.sev)" class="cursor-pointer" @click="openDetail(d)">
+                  <td><div class="flex"><span class="sev-bar h-5" :class="d.sev"></span></div></td>
+                  <td class="strong" x-text="d.field"></td>
+                  <td class="tnum text-[13px]" x-text="d.a||'—'"></td>
+                  <td class="tnum text-[13px]" :class="d.sev!=='ok'?'font-semibold text-slate-800':''" x-text="d.b||'—'"></td>
+                  <td>
+                    <span class="chip" :class="d.sev==='err'?'chip-err':d.sev==='warn'?'chip-warn':'chip-ok'">
+                      <span class="dot"></span>
+                      <span x-text="d.sev==='err'?'Błąd':d.sev==='warn'?'Ostrzeżenie':'Zgodne'"></span>
+                    </span>
+                  </td>
+                  <td><i data-lucide="chevron-right" class="text-slate-300" style="width:16px;height:16px;" aria-hidden="true"></i></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </div>
+
+  </div>{# /stage==='result' #}
+</div>
+
+{# ── Detail modal ── #}
+<div x-show="detail" x-transition.opacity x-cloak
+     class="fixed inset-0 z-[90] grid place-items-center p-4 modal-backdrop"
+     role="dialog" aria-modal="true" aria-labelledby="detailModalHeading"
+     @click="detail=null">
+  <div class="modal-card w-full max-w-[520px] animate-fadeup" @click.stop x-show="detail">
+    <div class="flex items-start justify-between p-5 border-b" style="border-color:var(--line);">
+      <div>
+        <div class="chip mb-2"
+             :class="detail&&detail.sev==='err'?'chip-err':detail&&detail.sev==='warn'?'chip-warn':'chip-ok'">
+          <span class="dot"></span>
+          <span x-text="detail&&detail.sev==='err'?'Błąd':detail&&detail.sev==='warn'?'Ostrzeżenie':'Zgodne'"></span>
+        </div>
+        <h3 id="detailModalHeading" class="text-[16px] font-bold text-slate-900" x-text="detail&&detail.field"></h3>
+      </div>
+      <button type="button" @click="detail=null" class="btn-icon btn-subtle" aria-label="Zamknij szczegóły pola">
+        <i data-lucide="x" style="width:18px;height:18px;" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="p-5 space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rounded-xl border border-slate-200 p-3.5">
+          <div class="divlabel">Dokument A</div>
+          <div class="text-[15px] font-semibold text-slate-800 mt-1 tnum" x-text="detail&&(detail.a||'—')"></div>
+        </div>
+        <div class="rounded-xl border p-3.5"
+             :style="detail&&detail.sev!=='ok'?'border-color:#fecaca;background:#fef4f4':'border-color:#e2e8f0'">
+          <div class="divlabel">Dokument B</div>
+          <div class="text-[15px] font-semibold mt-1 tnum"
+               :class="detail&&detail.sev!=='ok'?'text-red-600':'text-slate-800'"
+               x-text="detail&&(detail.b||'—')"></div>
+        </div>
+      </div>
+      <div x-show="detail&&detail.note" class="rounded-xl bg-slate-50 border border-slate-200 p-3.5">
+        <div class="divlabel mb-1 flex items-center gap-1.5">
+          <i data-lucide="sparkles" style="width:13px;height:13px;" aria-hidden="true"></i> Komentarz
+        </div>
+        <div class="text-[13.5px] text-slate-600 leading-snug" x-text="detail&&detail.note"></div>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 p-5 pt-0">
+      <button type="button" class="btn btn-ghost btn-sm" @click="detail=null">Zamknij</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+function compareApp() {
+  const shell = dcShell();
+
+  const ext = {
+    stage:    'idle',
+    fileA:    null,
+    fileB:    null,
+    overA:    false,
+    overB:    false,
+    typeA:    'auto',
+    typeB:    'auto',
+    useAI:    false,
+    loadStep: 0,
+    result:   {},
+    diffs:    [],
+    detail:   null,
+    apiError: null,
+
+    get ready()      { return !!this.fileA && !!this.fileB; },
+    get circ()       { return 2 * Math.PI * 52; },
+    get dashoffset() { return this.circ * (1 - this.score / 100); },
+    get riskColor()  { return this.score>=67 ? '#ef4444' : this.score>=34 ? '#f59e0b' : '#10b981'; },
+    get score() {
+      const e = this.result.total_errors||0, w = this.result.total_warnings||0, o = this.result.total_ok||0;
+      const tot = e+w+o;
+      if (!tot) return 0;
+      if (e > 0) return Math.min(100, 67 + Math.round(e/tot*25));
+      if (w > 0) return Math.min(66,  34 + Math.round(w/tot*25));
+      return Math.max(0, Math.round(10 - o/tot*10));
+    },
+
+    init() { shell.init.call(this); },
+
+    pickFile(slot) { document.getElementById('fileInput'+slot).click(); },
+    onFileChange(evt, slot) {
+      const f = evt.target.files[0];
+      if (f) { this[slot==='A'?'fileA':'fileB'] = f; this.$nextTick(()=>this.icons()); }
+    },
+    onDrop(evt, slot) {
+      this['over'+slot] = false;
+      const f = evt.dataTransfer.files[0];
+      if (f && (f.type==='application/pdf' || f.name.toLowerCase().endsWith('.pdf'))) {
+        this[slot==='A'?'fileA':'fileB'] = f;
+        this.$nextTick(()=>this.icons());
+      }
+    },
+    clearFile(slot) {
+      this[slot==='A'?'fileA':'fileB'] = null;
+      const inp = document.getElementById('fileInput'+slot);
+      if (inp) inp.value = '';
+    },
+    formatSize(bytes) {
+      if (!bytes) return '';
+      return bytes < 1048576 ? Math.round(bytes/1024)+' KB' : (bytes/1048576).toFixed(1)+' MB';
+    },
+    shortName(path) {
+      if (!path) return '';
+      const n = (path.split('/').pop()||path).replace(/\.pdf$/i,'');
+      return n.length>22 ? n.slice(0,20)+'…' : n;
+    },
+
+    async compare() {
+      if (!this.ready) return;
+      this.stage = 'loading';
+      this.loadStep = 0;
+      this.apiError = null;
+
+      [400,850,1350].forEach((t,i) => setTimeout(()=>{
+        this.loadStep = i+1;
+        this.$nextTick(()=>this.icons());
+      }, t));
+
+      const fd = new FormData();
+      fd.append('file_a', this.fileA);
+      fd.append('file_b', this.fileB);
+      fd.append('type_a', this.typeA);
+      fd.append('type_b', this.typeB);
+      if (this.useAI) fd.append('use_ai', '1');
+
+      try {
+        const res = await fetch('/api/analyze', {method:'POST', body:fd});
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          this.apiError = data.error || 'Błąd analizy dokumentów — spróbuj ponownie.';
+          this.result = {}; this.diffs = [];
+        } else {
+          this.result = data;
+          this.diffs = this._extractDiffs(data);
+        }
+      } catch(err) {
+        this.apiError = 'Błąd połączenia — sprawdź sieć i spróbuj ponownie.';
+        this.result = {}; this.diffs = [];
+      }
+      this.stage = 'result';
+      this.$nextTick(()=>this.icons());
+    },
+
+    _sev(status) {
+      if (!status) return 'ok';
+      const s = String(status).toLowerCase();
+      if (['roznica','brak_w_a','brak_w_b','tylko_a','tylko_b','error','blad'].some(x=>s.includes(x))) return 'err';
+      if (['watpliwe','warning','format','ostrzezenie'].some(x=>s.includes(x))) return 'warn';
+      return 'ok';
+    },
+
+    _extractDiffs(data) {
+      const rows = [];
+      // 1. enhanced_rows (unified format — highest priority)
+      if (Array.isArray(data.enhanced_rows) && data.enhanced_rows.length) {
+        data.enhanced_rows.forEach(r => rows.push({
+          field: r.field||r.field_name||r.key||'—',
+          a:     r.value_a??r.val_a??'',
+          b:     r.value_b??r.val_b??'',
+          sev:   this._sev(r.status),
+          note:  r.comment||r.note||'',
+        }));
+        return rows;
+      }
+      // 2. modules — read headers (document-level fields) and regex fields.
+      // Previously read mod.items (product line items: ref/qty_a/net_a) which have
+      // no field/key/val_a mapping → all rows showed '—'. Headers use key/val_a/val_b;
+      // regex fields use field/doc_a/doc_b. Prefer enhanced headers, fall back to
+      // table headers, then regex fields.
+      if (data.modules && typeof data.modules==='object') {
+        const mods = data.modules;
+        // 2a. Enhanced headers (best quality)
+        const enhHdrs = mods.enhanced && Array.isArray(mods.enhanced.headers) ? mods.enhanced.headers : [];
+        // 2b. Table headers (fallback when enhanced has no headers)
+        const tblHdrs = mods.table && Array.isArray(mods.table.headers) ? mods.table.headers : [];
+        const hdrSrc = enhHdrs.length ? enhHdrs : tblHdrs;
+        hdrSrc.forEach(h => rows.push({
+          field: h.key||h.field||h.field_name||'—',
+          a:     h.val_a??h.value_a??'',
+          b:     h.val_b??h.value_b??'',
+          sev:   this._sev(h.status),
+          note:  h.comment||'',
+        }));
+        // 2c. Regex fields (field/doc_a/doc_b — only when no headers available)
+        if (!rows.length && mods.regex && Array.isArray(mods.regex.fields)) {
+          mods.regex.fields.forEach(f => rows.push({
+            field: f.field||f.field_name||f.key||'—',
+            a:     f.doc_a??f.value_a??f.val_a??'',
+            b:     f.doc_b??f.value_b??f.val_b??'',
+            sev:   this._sev(f.status),
+            note:  f.comment||'',
+          }));
+        }
+      }
+      // 3. items directly (fallback)
+      if (!rows.length && Array.isArray(data.items)) {
+        data.items.forEach(it => rows.push({
+          field: it.field||it.key||'—',
+          a:     it.value_a??it.val_a??'',
+          b:     it.value_b??it.val_b??'',
+          sev:   this._sev(it.status),
+          note:  it.comment||'',
+        }));
+      }
+      return rows;
+    },
+
+    rowCls(sev) { return {err:'row-err',warn:'row-warn',ok:'row-ok'}[sev]||'row-ok'; },
+
+    openDetail(d) {
+      this.detail = d;
+      this.$nextTick(()=>this.icons());
+    },
+
+    reset() {
+      this.stage='idle'; this.fileA=null; this.fileB=null;
+      this.typeA='auto'; this.typeB='auto';
+      this.result={}; this.diffs=[]; this.detail=null; this.apiError=null;
+      ['fileInputA','fileInputB'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+      this.$nextTick(()=>this.icons());
+    },
+  };
+
+  Object.defineProperties(shell, Object.getOwnPropertyDescriptors(ext));
+  return shell;
+}
+</script>
+{% endblock %}

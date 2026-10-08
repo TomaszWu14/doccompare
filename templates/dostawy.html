@@ -1,0 +1,596 @@
+{% extends "base.html" %}
+{% block title %}Dostawy{% endblock %}
+
+{% block extra_head %}
+<style>
+.dost-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.dost-stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:12px 18px;min-width:110px;text-align:center;cursor:pointer;transition:box-shadow .15s}
+.dost-stat:hover{box-shadow:0 0 0 2px var(--accent)}
+.dost-stat.active{box-shadow:0 0 0 2px var(--accent);background:var(--accent-bg,#eff6ff)}
+.dost-stat-val{font-size:21px;font-weight:800;color:var(--text);font-family:var(--mono)}
+.dost-stat-lbl{font-size:10px;color:var(--muted);margin-top:2px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.5px}
+
+.dost-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.dost-toolbar input[type=search]{flex:1;min-width:220px;padding:8px 12px;
+  border-radius:8px;border:1px solid var(--border);background:var(--surface);
+  color:var(--text);font-size:13px}
+.dost-toolbar select{padding:8px 10px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);font-size:13px}
+
+.dost-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:14px 16px;margin-bottom:8px;display:grid;
+  grid-template-columns:1fr auto;gap:8px;align-items:start;
+  transition:box-shadow .12s}
+.dost-card:hover{box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.dost-po{font-family:var(--mono);font-size:15px;font-weight:800;color:var(--text)}
+.dost-supplier{font-size:12px;color:var(--muted);margin-top:2px}
+.dost-info{display:flex;gap:6px 16px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:6px}
+.dost-info b{color:var(--text);font-weight:700;font-weight:600}
+.dost-info .mono{font-family:var(--mono)}
+.dost-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.dost-badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;
+  font-size:11px;font-weight:700;white-space:nowrap}
+.dost-badge.blue{background:#dbeafe;color:#1e40af}
+.dost-badge.amber{background:#fef3c7;color:#b45309}
+.dost-badge.green{background:#dcfce7;color:#15803d}
+.dost-badge.gray{background:#f1f5f9;color:#64748b}
+.dost-badge.red{background:#fee2e2;color:#b91c1c}
+
+/* Płaski stepper listy: równe małe kółka (jedno na status) */
+.dost-stepper{display:flex;align-items:center;gap:0;margin-top:10px;overflow-x:auto;padding-bottom:2px}
+.dost-fcircle{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:8px;font-weight:800;flex-shrink:0;box-sizing:border-box;
+  border:1.5px solid var(--border);background:#fff;color:var(--muted)}
+.dost-fcircle.reached{background:#16a34a;border-color:#16a34a;color:#fff}
+.dost-fcircle.active.c-green{background:#16a34a;border-color:#16a34a;color:#fff}
+.dost-fcircle.active.c-amber{background:#f59e0b;border-color:#f59e0b;color:#fff}
+.dost-fcircle.active.c-red{background:#dc2626;border-color:#dc2626;color:#fff}
+.dost-fcircle.active.c-blue{background:#3b82f6;border-color:#3b82f6;color:#fff}
+.dost-fcircle.active.c-gray{background:#94a3b8;border-color:#94a3b8;color:#fff}
+.dost-fcircle.active{box-shadow:0 0 0 2px rgba(37,99,235,.25)}
+/* „Czekam na kolejny krok" — pulsujący obrys aktywnego kółka w kolorze statusu */
+@keyframes dost-pulse{
+  0%{box-shadow:0 0 0 0 var(--pulse,rgba(59,130,246,.55))}
+  70%{box-shadow:0 0 0 7px rgba(0,0,0,0)}
+  100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}
+}
+.dost-fcircle.active.waiting{animation:dost-pulse 1.5s ease-out infinite}
+@media (prefers-reduced-motion: reduce){
+  .dost-fcircle.active.waiting{animation:none;box-shadow:0 0 0 3px var(--pulse,rgba(59,130,246,.55))}
+}
+.dost-fline{height:2px;flex:1;min-width:4px}
+.dost-fline.done{background:#16a34a}
+.dost-fline.todo{background:var(--border)}
+
+/* Callout pod aktywnym krokiem: równoległy tor o tej samej siatce co kółka,
+   więc komórka N trafia dokładnie pod kółko N. Łącznik (pionowa linia) + dymek
+   z nazwą statusu i komentarzem — „to o ten krok chodzi". */
+.dost-cl-track{display:flex;align-items:flex-start;gap:0;position:relative}
+.dost-cl-cell{width:18px;flex-shrink:0;box-sizing:border-box;position:relative}
+.dost-cl-spacer{flex:1;min-width:4px;height:2px;visibility:hidden}
+.dost-cl-link{position:absolute;top:-6px;left:50%;transform:translateX(-50%);
+  width:2px;height:14px;border-radius:2px}
+.dost-cl-box{position:absolute;top:10px;z-index:3;background:var(--surface);
+  border:1px solid var(--border);border-radius:11px;padding:9px 13px;
+  box-shadow:0 6px 20px rgba(0,0,0,.12);min-width:210px;max-width:320px;width:max-content}
+.dost-cl-box.anchor-center{left:50%;transform:translateX(-50%)}
+.dost-cl-box.anchor-left{left:-2px}
+.dost-cl-box.anchor-right{right:-2px}
+.dost-cl-title{font-size:12.5px;font-weight:800;color:var(--text);
+  display:flex;align-items:flex-start;gap:7px;line-height:1.3}
+.dost-cl-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.dost-cl-meta{font-size:10px;color:var(--muted);margin-top:3px;font-family:var(--mono)}
+.dost-cl-desc{font-size:11px;color:var(--text);opacity:.8;margin-top:6px;line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.dost-cl-manual{font-size:10.5px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;
+  border-radius:6px;padding:2px 6px;margin-top:4px;display:inline-block}
+.dost-cl-manual b{font-weight:800}
+.dost-cl-cmt{font-size:11px;color:var(--text);margin-top:5px;padding-top:5px;
+  border-top:1px dashed var(--border);line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+.dost-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.dost-link{font-size:12px;color:var(--accent);text-decoration:none;font-weight:600}
+.dost-link:hover{text-decoration:underline}
+
+.dost-empty{text-align:center;padding:60px 20px;color:var(--muted)}
+.dost-empty-icon{font-size:48px;margin-bottom:12px}
+
+/* PDF drop zone */
+.pdf-drop{display:flex;align-items:center;gap:6px;padding:12px 14px;
+  border:2px dashed var(--border);border-radius:10px;cursor:pointer;
+  transition:border-color .15s,background .15s;min-height:48px;flex-wrap:wrap}
+.pdf-drop:hover{border-color:var(--accent);background:var(--accent-bg,#eff6ff)}
+.pdf-drop--active{border-color:var(--accent);background:var(--accent-bg,#eff6ff);border-style:solid}
+
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);
+  display:flex;align-items:center;justify-content:center;z-index:200;padding:20px}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;
+  padding:28px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.modal-title{font-size:16px;font-weight:800;color:var(--text);margin-bottom:20px}
+.form-group{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.form-group label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.4px}
+.form-group input,.form-group select,.form-group textarea{
+  padding:9px 12px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg,#fff);color:var(--text);font-size:13px;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.form-hint{font-size:11px;color:var(--muted);margin-top:3px}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;
+  border-top:1px solid var(--border)}
+.prio-pilny{color:#b91c1c;font-weight:800}
+.prio-spokojnie{color:#64748b}
+
+[x-cloak]{display:none!important}
+</style>
+{% endblock %}
+
+{% block page_title %}Dostawy{% endblock %}
+
+{% block content %}
+{% set BADGE_MAP = {
+  'utworzone':'gray','wyslane_do_dostawcy':'gray','proforma_oczekiwana':'gray',
+  'proforma_otrzymana':'amber','proforma_zaladowana':'amber','zweryfikowane':'amber',
+  'sprawdzone_zgodne':'green','sprawdzone_do_weryfikacji':'amber','sprawdzone_niezgodne':'red',
+  'artwork_oczekiwanie':'amber','zatwierdzone_do_wyplyniecia':'amber',
+  'artwork_master_zaladowany':'amber','artwork_czeka_fabryczny':'amber',
+  'artwork_brak_mastera':'red',
+  'artwork_zgodne':'green','artwork_niezgodne':'amber','artwork_bledne':'red',
+  'etd_sap':'blue','zlecenie_spedycja':'blue','agent_przypisany':'blue',
+  'packing_list_oczekiwanie':'amber','packing_list_otrzymany':'blue',
+  'dokumenty_odprawa':'blue','dostawa_przychodzaca':'blue','dokumenty_wyslane_odprawa':'blue',
+  'sad_draft':'amber','pzc_agencja':'blue','dostawa_magazyn':'amber',
+  'rozliczenie_fiori':'amber','rozliczenie_transportu':'green',
+  'zaokretowane':'blue','w_transporcie':'blue','na_miejscu':'blue','w_odprawie':'blue',
+  'po_odprawie':'blue','w_magazynie':'amber','dostarczone':'green',
+  'do_rozliczenia':'amber','rozliczone':'green',
+} %}
+{# Mocny kolor (łącznik + kropka + górna krawędź dymka) dla koloru z BADGE_MAP #}
+{% set CL = {'red':'#dc2626','amber':'#f59e0b','green':'#16a34a','blue':'#3b82f6','gray':'#94a3b8'} %}
+{# RGB (do rgba pulsu) dla koloru z BADGE_MAP #}
+{% set CLA = {'red':'220,38,38','amber':'245,158,11','green':'22,163,74','blue':'59,130,246','gray':'148,163,184'} %}
+{# Statusy „oczekiwania na kolejny krok" — aktywne kółko pulsuje (czekamy na input/akcję). #}
+{% set WAIT = [
+  'wyslane_do_dostawcy','proforma_oczekiwana','proforma_otrzymana','proforma_zaladowana',
+  'artwork_oczekiwanie','artwork_czeka_fabryczny','artwork_brak_mastera','etd_sap','zlecenie_spedycja','agent_przypisany',
+  'packing_list_oczekiwanie','dokumenty_odprawa','dokumenty_wyslane_odprawa',
+  'sad_draft','pzc_agencja','dostawa_magazyn','rozliczenie_fiori','rozliczenie_transportu',
+  'na_miejscu','w_odprawie','do_rozliczenia',
+] %}
+<div x-data="dostawyApp()" x-cloak>
+
+  {# ── Statystyki ── #}
+  <div class="dost-stats">
+    <div class="dost-stat" @click="clearPhase()" :class="phaseFilter===''&&statusFilter===''?'active':''">
+      <div class="dost-stat-val">{{ stats.total }}</div>
+      <div class="dost-stat-lbl">Wszystkie</div>
+    </div>
+    <div class="dost-stat" @click="setPhase('active')" :class="phaseFilter==='active'?'active':''">
+      <div class="dost-stat-val" style="color:var(--accent)">{{ stats.active }}</div>
+      <div class="dost-stat-lbl">Aktywne</div>
+    </div>
+    {% for ph in phases %}
+    <div class="dost-stat" @click="setPhase('{{ loop.index0 }}')"
+         :class="phaseFilter==='{{ loop.index0 }}'?'active':''">
+      <div class="dost-stat-val {% if stats.by_phase[loop.index0] > 0 %}{% endif %}">
+        {{ stats.by_phase[loop.index0] }}
+      </div>
+      <div class="dost-stat-lbl">{{ ph.label }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# ── Toolbar ── #}
+  <div class="dost-toolbar">
+    <form method="get" style="display:contents">
+      <input type="search" name="q" value="{{ q }}" placeholder="Filtruj: nr zamówienia, dostawca, kupiec, kontener, nr dostawy przych.…"
+             @input.debounce.500="$el.form.submit()">
+      <select name="status" @change="$el.form.submit()">
+        <option value="">Wszystkie statusy</option>
+        {% for key, lbl in status_labels.items() %}
+        <option value="{{ key }}" {% if status_filter == key %}selected{% endif %}>{{ lbl }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" name="phase" :value="phaseFilter!='active'?phaseFilter:''">
+    </form>
+    <button type="button" class="btn btn-primary btn-sm" @click="showCreate=true">
+      <i data-lucide="plus" style="width:14px;height:14px"></i> Nowa dostawa
+    </button>
+    {% if role in ['manager','superuser','admin'] %}
+    <button type="button" class="btn btn-ghost btn-sm" @click="backfillRefs()" :disabled="backfilling"
+            title="Wyczyść kolumnę REF we wszystkich istniejących pozycjach (usuń doklejony opis)">
+      <i data-lucide="eraser" style="width:14px;height:14px"></i>
+      <span x-text="backfilling ? 'Czyszczę…' : 'Wyczyść REF-y'"></span>
+    </button>
+    {% endif %}
+  </div>
+
+  {# ── Lista ── #}
+  {% if items %}
+    {% for d in items %}
+    {% set phase = d._phase %}
+    <div class="dost-card">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span class="dost-po">{{ d.nr_zamowienia }}</span>
+          {% if d.priorytet == 'pilny' %}
+            <span class="dost-badge red">⚡ Pilne</span>
+          {% elif d.priorytet == 'spokojnie' %}
+            <span class="dost-badge gray">Spokojnie</span>
+          {% endif %}
+          {% if d.numer_kontenera %}
+            <span class="dost-badge gray" style="font-family:var(--mono);font-size:10px">
+              {{ d.numer_kontenera }}
+            </span>
+          {% endif %}
+        </div>
+        <div class="dost-supplier">
+          {% if d.supplier_name %}{{ d.supplier_name }}{% endif %}
+          {% if d.supplier_code %} · {{ d.supplier_code }}{% endif %}
+          {% if not d.supplier_name and not d.supplier_code %}<span style="color:var(--muted)">Dostawca nie podany</span>{% endif %}
+        </div>
+        {% set _etd = d.planowane_etd or d.etd_plan %}
+        {% set _dt = d.destination_type or 'magazyn' %}
+        <div class="dost-info">
+          <span><b>Proces:</b>
+            {%- if _dt == 'tranzyt' %} 🚚 Tranzyt{% if d.transit_country %} – {{ d.transit_country }}{% endif %}
+            {%- elif _dt == 'inne' %} Inne
+            {%- else %} 🏭 Magazyn Centralny Radom{% endif %}</span>
+          {% if d.kupiec %}<span><b>Kupiec:</b> {{ d.kupiec }}</span>{% endif %}
+          {% if d.eta %}<span><b>ETA:</b> {{ d.eta }}</span>{% endif %}
+          {% if _etd %}<span><b>ETD:</b> {{ _etd }}</span>{% endif %}
+          {% if d.numer_kontenera %}<span><b>Kontener:</b> <span class="mono">{{ d.numer_kontenera }}</span></span>{% endif %}
+          {% if d.dostawa_18 %}<span><b>Dostawa przych.:</b> <span class="mono">{{ d.dostawa_18 }}</span></span>{% endif %}
+        </div>
+
+        {# Płaski mini-stepper: 20 równych kółek #}
+        <div class="dost-stepper" style="margin-top:10px">
+          {% for st in steps %}{% set i = loop.index0 %}
+          {% set reached = (d._step >= 0 and i <= d._step) %}
+          {% set is_active = (i == d._step) %}
+          {% set _wait = is_active and d.status in WAIT %}
+          {# Szare statusy oczekiwania pulsują bursztynem (widoczny „znak czekania"); kolorowe — swoim kolorem #}
+          {% set _pc = '245,158,11' if BADGE_MAP.get(d.status,'blue')=='gray' else CLA.get(BADGE_MAP.get(d.status,'blue'),'59,130,246') %}
+          <div class="dost-fcircle {{ 'reached' if (reached and not is_active) else '' }} {{ ('active c-' ~ BADGE_MAP.get(d.status,'blue')) if is_active else '' }} {{ 'waiting' if _wait else '' }}"
+               {% if _wait %}style="--pulse:rgba({{ _pc }},.7)"{% endif %}
+               title="{{ st.label }}{% if _wait %} — czekam na kolejny krok{% endif %}">{% if reached and not is_active %}✓{% else %}{{ loop.index }}{% endif %}</div>
+          {% if not loop.last %}<div class="dost-fline {{ 'done' if (d._step >= 0 and i < d._step) else 'todo' }}"></div>{% endif %}
+          {% endfor %}
+        </div>
+
+        {# Callout dokładnie pod aktywnym kółkiem — nazwa statusu + komentarz (uwagi) #}
+        {% if d._step >= 0 %}
+        {% set _cl = CL.get(BADGE_MAP.get(d.status,'gray'),'#94a3b8') %}
+        {% set _anchor = 'anchor-left' if d._step <= 5 else ('anchor-right' if d._step >= 14 else 'anchor-center') %}
+        {% set _clh = 50 + (40 if d._status_desc else 0) + (24 if d.status_manual_by else 0) + (34 if d.uwagi else 0) %}
+        <div class="dost-cl-track" style="min-height:{{ _clh }}px">
+          {% for st in steps %}{% set i = loop.index0 %}
+          <div class="dost-cl-cell">
+            {% if i == d._step %}
+              <span class="dost-cl-link" style="background:{{ _cl }}"></span>
+              <div class="dost-cl-box {{ _anchor }}" style="border-top:3px solid {{ _cl }}">
+                <div class="dost-cl-title">
+                  <span class="dost-cl-dot" style="background:{{ _cl }}"></span>
+                  {{ d._status_label }}
+                </div>
+                <div class="dost-cl-meta">krok {{ d._step + 1 }}/20 · {{ d.updated_at[:10] if d.updated_at else d.created_at[:10] if d.created_at else '' }}</div>
+                {% if d._status_desc %}<div class="dost-cl-desc">{{ d._status_desc }}</div>{% endif %}
+                {% if d.status_manual_by %}<div class="dost-cl-manual">✋ Ręcznie ustawiony przez <b>{{ d.status_manual_by }}</b></div>{% endif %}
+                {% if d.uwagi %}<div class="dost-cl-cmt" title="{{ d.uwagi }}">💬 {{ d.uwagi }}</div>{% endif %}
+              </div>
+            {% endif %}
+          </div>
+          {% if not loop.last %}<div class="dost-cl-spacer"></div>{% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {# Drobne dodatkowe znaczniki (status główny jest już w callout wyżej) #}
+        {% set _has_meta = d._sla_overdue or d.artwork_status in ['zatwierdzony','uwagi'] %}
+        {% if _has_meta %}
+        <div class="dost-meta" style="margin-top:4px">
+          {% if d._sla_overdue %}
+            <span class="dost-badge red" style="font-size:10px"
+                  title="W tym statusie od {{ d._sla_days }} dni (limit {{ d._sla_limit }} dni)">
+              ⚠ {{ d._sla_days }} dni
+            </span>
+          {% endif %}
+          {% if d.artwork_status == 'zatwierdzony' %}
+            <span class="dost-badge green" style="font-size:10px">Artwork ✓</span>
+          {% elif d.artwork_status == 'uwagi' %}
+            <span class="dost-badge red" style="font-size:10px">Artwork: uwagi</span>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="dost-actions" style="flex-direction:column;align-items:flex-end">
+        <a href="/dostawy/{{ d.nr_zamowienia }}" class="btn btn-sm btn-subtle">
+          Szczegóły <i data-lucide="chevron-right" style="width:12px;height:12px"></i>
+        </a>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="dost-empty">
+      <div class="dost-empty-icon">📦</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">
+        {% if q or status_filter %}Brak wyników dla wybranych filtrów{% else %}Brak dostaw{% endif %}
+      </div>
+      <div style="font-size:13px;margin-bottom:16px">
+        {% if not q and not status_filter %}
+        Utwórz pierwszą dostawę klikając "Nowa dostawa"
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {# ── Modal: Nowa dostawa ── #}
+  <div class="modal-bg" x-show="showCreate" @click.self="showCreate=false" style="display:none">
+    <div class="modal-box">
+      <div class="modal-title">📦 Nowa dostawa</div>
+
+      <div class="form-group">
+        <label>Załącz PDF zamówienia</label>
+        <label class="pdf-drop"
+               :class="{ 'pdf-drop--active': pdfFile }"
+               @dragover.prevent @drop.prevent="onPdfDrop($event)">
+          <input type="file" accept=".pdf,application/pdf" style="display:none"
+                 x-ref="pdfInput" @change="onPdfChange($event)">
+          <span x-show="!pdfFile" style="color:var(--muted);font-size:13px">
+            📎 Przeciągnij PDF lub <a href="#" @click.prevent="$refs.pdfInput.click()" style="color:var(--accent)">wybierz plik</a>
+          </span>
+          <span x-show="pdfFile" style="font-size:13px;font-weight:600;word-break:break-all"
+                x-text="pdfFile ? pdfFile.name : ''"></span>
+          <button type="button" x-show="pdfFile"
+                  @click.stop="clearPdf()"
+                  style="margin-left:8px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;padding:0">✕</button>
+        </label>
+        <span class="form-hint">System automatycznie odczyta dane z dokumentu PO</span>
+        <span x-show="extracting" style="font-size:12px;color:var(--accent);margin-top:4px">
+          ⏳ Analizuję dokument…
+        </span>
+        <span x-show="extractedFields && !extracting" style="font-size:12px;color:#16a34a;margin-top:4px">
+          ✅ Dane odczytane z PDF
+          <span x-show="extractedFields && extractedFields.line_items && extractedFields.line_items.length"
+                x-text="' — ' + (extractedFields.line_items||[]).length + ' pozycji'"
+                style="color:var(--muted)"></span>
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label>Numer zamówienia SAP *</label>
+        <input type="text" x-model="form.nr" placeholder="np. 4500012345"
+               maxlength="15" @keydown.enter.prevent="createDostawa()"
+               :readonly="!!pdfFile"
+               :style="pdfFile ? 'background:var(--bg,#f8fafc);cursor:not-allowed;' : ''"
+               style="font-family:var(--mono);font-size:15px;font-weight:700;letter-spacing:.5px">
+        <span class="form-hint">Zaczyna się od 4 lub 5, 9–11 cyfr</span>
+        <span x-show="err" x-text="err" style="color:var(--error);font-size:12px;font-weight:600" x-cloak></span>
+      </div>
+
+      <div class="form-group">
+        <label>Dostawca</label>
+        <input type="text" x-model="form.supplier_name"
+               placeholder="Nazwa dostawcy (opcjonalnie)"
+               list="supplier-list-dl">
+        <datalist id="supplier-list-dl">
+          {% for s in suppliers %}
+          <option value="{{ s.name }}">{{ s.code }}</option>
+          {% endfor %}
+        </datalist>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group">
+          <label>Kod dostawcy</label>
+          <input type="text" x-model="form.supplier_code" placeholder="np. FULL" maxlength="20">
+        </div>
+        <div class="form-group">
+          <label>Priorytet</label>
+          <select x-model="form.priorytet">
+            <option value="normalny">Normalny</option>
+            <option value="pilny">⚡ Pilny</option>
+            <option value="spokojnie">Spokojnie</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group">
+          <label>Proces / przeznaczenie</label>
+          <select x-model="form.destination_type">
+            <option value="magazyn">🏭 Magazyn Centralny Radom</option>
+            <option value="tranzyt">🚚 Tranzyt</option>
+            <option value="inne">Inne</option>
+          </select>
+        </div>
+        <div class="form-group" x-show="form.destination_type === 'tranzyt'">
+          <label>Kraj tranzytu</label>
+          <select x-model="form.transit_country">
+            <option value="">— wybierz kraj —</option>
+            {% for c in transit_countries %}
+            <option value="{{ c.name }}">{{ c.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-hint">Listę krajów dodajesz w
+            <a href="/transit-countries" target="_blank" style="color:var(--accent)">Państwa tranzytowe</a>.</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Uwagi (opcjonalnie)</label>
+        <textarea x-model="form.uwagi" rows="2" placeholder="Dodatkowe informacje…"
+                  style="resize:vertical"></textarea>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" @click="showCreate=false">Anuluj</button>
+        <button type="button" class="btn btn-primary" @click="createDostawa()"
+                :disabled="creating">
+          <span x-show="creating">Tworzę…</span>
+          <span x-show="!creating">Utwórz dostawę</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+function dostawyApp() {
+  return {
+    showCreate: false,
+    creating: false,
+    phaseFilter: {{ phase_filter | tojson }},
+    statusFilter: {{ status_filter | tojson }},
+    form: { nr: '', supplier_name: '', supplier_code: '', priorytet: 'normalny', uwagi: '',
+            destination_type: 'magazyn', transit_country: '' },
+    err: '',
+    pdfFile: null,
+    extracting: false,
+    extractedFields: null,
+    backfilling: false,
+
+    async backfillRefs() {
+      if (this.backfilling) return;
+      if (!confirm('Wyczyścić kolumnę REF we wszystkich istniejących pozycjach zamówień (usunąć doklejony opis)? Operacja jednorazowa.')) return;
+      this.backfilling = true;
+      try {
+        const r = await fetch('/api/dostawy/backfill-refs', { method: 'POST' });
+        const d = await r.json();
+        if (!r.ok) { alert(d.error || 'Błąd backfillu REF'); return; }
+        alert('Zaktualizowano pozycji: ' + (d.updated || 0));
+      } catch (e) {
+        alert('Błąd połączenia');
+      } finally {
+        this.backfilling = false;
+      }
+    },
+
+    clearPhase() {
+      this.phaseFilter = '';
+      this.statusFilter = '';
+      this._reloadWithPhase('');
+    },
+    setPhase(v) {
+      this.phaseFilter = v;
+      this.statusFilter = '';
+      this._reloadWithPhase(v === 'active' ? '' : v);
+    },
+    _reloadWithPhase(v) {
+      const u = new URL(window.location.href);
+      if (v !== '') u.searchParams.set('phase', v); else u.searchParams.delete('phase');
+      u.searchParams.delete('status');
+      window.location.href = u.toString();
+    },
+
+    _sapNr(s) {
+      // Wytnij sam numer SAP (4/5 + 9–11 cyfr) z nazwy pliku / tekstu, np.
+      // "PURCHASE ORDER 4700000696" → "4700000696".
+      const m = String(s || '').match(/[45]\d{8,10}/);
+      return m ? m[0] : '';
+    },
+    async onPdfChange(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      this.pdfFile = file;
+      this.form.nr = this._sapNr(file.name);
+      await this._extractFromPdf(file);
+    },
+    async onPdfDrop(e) {
+      const file = e.dataTransfer.files[0];
+      if (!file || file.type !== 'application/pdf') { this.err = 'Przeciągnij plik PDF'; return; }
+      this.pdfFile = file;
+      this.form.nr = this._sapNr(file.name);
+      await this._extractFromPdf(file);
+    },
+    clearPdf() {
+      this.pdfFile = null;
+      this.extractedFields = null;
+      this.$refs.pdfInput.value = '';
+    },
+    async _extractFromPdf(file) {
+      this.extracting = true;
+      this.extractedFields = null;
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const r = await fetch('/api/dostawy/extract-po', { method: 'POST', body: fd });
+        if (!r.ok) return;
+        const d = await r.json();
+        this.extractedFields = d;
+        // Numer SAP z odczytu (sap_number z treści PO ma pierwszeństwo, potem delivery_number).
+        const _nr = this._sapNr(d.sap_number) || this._sapNr(d.delivery_number);
+        if (_nr) this.form.nr = _nr;
+        if (d.supplier_name && !this.form.supplier_name)
+          this.form.supplier_name = d.supplier_name;
+        if (d.supplier_code && !this.form.supplier_code)
+          this.form.supplier_code = d.supplier_code;
+      } catch(_) {}
+      finally { this.extracting = false; }
+    },
+
+    async createDostawa() {
+      this.err = '';
+      const nr = (this.form.nr || '').trim();
+      if (!nr) { this.err = 'Podaj numer zamówienia lub załącz PDF'; return; }
+      if (!/^[45]\d{8,10}$/.test(nr)) {
+        this.err = 'Numer musi zaczynać się od 4 lub 5 i mieć 9–11 cyfr';
+        return;
+      }
+      if (this.form.destination_type === 'tranzyt' && !this.form.transit_country) {
+        this.err = 'Wybierz kraj tranzytu (lub zmień proces na Magazyn/Inne)';
+        return;
+      }
+      this.creating = true;
+      try {
+        const r = await fetch('/api/dostawy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nr_zamowienia: nr,
+            supplier_name: this.form.supplier_name,
+            supplier_code: this.form.supplier_code,
+            priorytet: this.form.priorytet,
+            uwagi: this.form.uwagi,
+            destination_type: this.form.destination_type,
+            transit_country: this.form.transit_country,
+          }),
+        });
+        const d = await r.json();
+        if (!r.ok) { this.err = d.error || 'Błąd tworzenia'; return; }
+
+        if (this.pdfFile) {
+          const fd = new FormData();
+          fd.append('file', this.pdfFile);
+          fd.append('doc_type', 'PO');
+          const uploadR = await fetch('/api/dostawy/' + encodeURIComponent(nr) + '/documents', {
+            method: 'POST',
+            body: fd,
+          });
+          if (!uploadR.ok) {
+            const ud = await uploadR.json().catch(() => ({}));
+            this.err = 'Zamówienie utworzone, ale błąd przesyłania PDF: ' + (ud.error || uploadR.status);
+            this.creating = false;
+            return;
+          }
+        }
+
+        window.location.href = '/dostawy/' + encodeURIComponent(nr);
+      } catch (e) {
+        this.err = 'Błąd połączenia';
+      } finally {
+        this.creating = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

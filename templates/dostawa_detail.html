@@ -1,0 +1,2624 @@
+{% extends "base.html" %}
+{% block title %}{{ item.nr_zamowienia }} — Dostawa{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Document tiles ─────────────────────────────────────── */
+.doc-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
+  align-items: flex-start;
+}
+
+/* Paired tiles (PO↔PI, ARTWORK↔ARTWORK_B) */
+.doc-compare-pair {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: var(--bg, #f8fafc);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  padding: 4px;
+}
+.doc-compare-pair .doc-tile {
+  border: none;
+  border-radius: 12px;
+  flex: 1;
+  min-width: 130px;
+  max-width: 170px;
+  box-shadow: none;
+  margin: 0;
+}
+.doc-compare-pair .doc-tile:hover {
+  background: var(--surface, #fff);
+  box-shadow: 0 2px 12px rgba(0,0,0,.08);
+}
+.doc-compare-pair .doc-tile.active {
+  background: var(--surface, #fff);
+  box-shadow: 0 0 0 2px rgba(37,99,235,.2), 0 2px 12px rgba(0,0,0,.08);
+}
+
+/* Connector arrow between paired tiles */
+.doc-compare-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 4px;
+  flex-shrink: 0;
+  width: 40px;
+}
+.doc-compare-arrow-icon {
+  width: 22px; height: 22px;
+  color: var(--accent);
+  opacity: .7;
+}
+.doc-compare-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 9px; font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.doc-compare-badge.ok   { background: #dcfce7; color: #15803d; }
+.doc-compare-badge.warn { background: #fef3c7; color: #b45309; }
+.doc-compare-badge.err  { background: #fee2e2; color: #b91c1c; }
+.doc-compare-badge.pend { background: #eff6ff; color: #3b82f6; }
+.doc-compare-badge.none { background: #f1f5f9; color: #94a3b8; }
+
+/* Standalone tile sizing */
+.doc-grid > .doc-tile {
+  min-width: 140px;
+  max-width: 180px;
+  flex: 1 1 140px;
+}
+
+.doc-tile {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 12px 12px;
+  cursor: pointer;
+  transition: box-shadow .15s, transform .1s, border-color .15s;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+.doc-tile:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,.12);
+  transform: translateY(-1px);
+}
+.doc-tile.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.15), 0 4px 20px rgba(0,0,0,.1);
+}
+.doc-tile.drag {
+  border-color: var(--accent);
+  border-style: dashed;
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(37,99,235,.18);
+}
+
+/* LED dot */
+.doc-led {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  flex-shrink: 0;
+}
+.doc-led.pending  { background: #cbd5e1; }
+.doc-led.uploaded { background: #3b82f6; box-shadow: 0 0 6px rgba(59,130,246,.6); }
+.doc-led.ok       { background: #16a34a; box-shadow: 0 0 6px rgba(22,163,74,.6); }
+.doc-led.warn     { background: #d97706; box-shadow: 0 0 6px rgba(217,119,6,.5); }
+.doc-led.error    { background: #dc2626; box-shadow: 0 0 6px rgba(220,38,38,.6); animation: blink 1.5s infinite; }
+.doc-led.missing  { background: #dc2626; box-shadow: 0 0 0 2px #fff, 0 0 7px rgba(220,38,38,.75); animation: blink 1.1s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+.doc-missing-txt { color: #dc2626; font-weight: 600; font-size: 11px; }
+.doc-missing-sub { color: #dc2626; font-size: 9px; opacity: .85; }
+.dd-deleted-banner {
+  display: flex; align-items: flex-start; gap: 8px; margin: 0 0 14px;
+  padding: 9px 12px; border: 1px solid #fecaca; background: #fef2f2;
+  border-radius: 8px; color: #991b1b; font-size: 12.5px;
+}
+
+/* Color strip + icon */
+.doc-icon-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.doc-icon-wrap svg { width: 24px; height: 24px; }
+
+.doc-type-code {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: .5px;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+.doc-type-label {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+
+.doc-filename {
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-bottom: 6px;
+  font-family: var(--mono);
+}
+.doc-filename.has-file { color: var(--text); }
+
+/* Comparison chips on tile */
+.doc-comp-chips { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.doc-comp-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.doc-comp-chip.ok   { background: #dcfce7; color: #15803d; }
+.doc-comp-chip.warn { background: #fef3c7; color: #b45309; }
+.doc-comp-chip.err  { background: #fee2e2; color: #b91c1c; }
+.doc-comp-chip.pend { background: #f1f5f9; color: #64748b; }
+.doc-comp-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.doc-comp-chip.ok   .doc-comp-dot { background: #16a34a; }
+.doc-comp-chip.warn .doc-comp-dot { background: #d97706; }
+.doc-comp-chip.err  .doc-comp-dot { background: #dc2626; }
+.doc-comp-chip.pend .doc-comp-dot { background: #94a3b8; }
+
+/* Upload hint */
+.doc-upload-hint {
+  font-size: 9.5px;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.doc-tile:hover .doc-upload-hint { opacity: 1; }
+
+/* ── Side drawer ─────────────────────────────────────────── */
+.doc-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.3);
+  z-index: 300;
+  display: flex;
+  justify-content: flex-end;
+}
+.doc-drawer {
+  background: var(--surface);
+  width: 420px;
+  max-width: 96vw;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 32px rgba(0,0,0,.18);
+  overflow: hidden;
+}
+.doc-drawer-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.doc-drawer-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  flex: 1;
+}
+.doc-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.doc-preview-frame {
+  width: 100%;
+  height: 320px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8fafc;
+  margin-bottom: 14px;
+}
+.doc-file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: var(--bg, #f8fafc);
+}
+.doc-file-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-file-size { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+.doc-file-actions { display: flex; gap: 5px; flex-shrink: 0; }
+.doc-file-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+.doc-file-btn:hover { background: var(--bg, #f1f5f9); }
+.doc-file-btn.danger { color: var(--error); border-color: #fca5a5; }
+.doc-file-btn.danger:hover { background: #fee2e2; }
+
+.comp-result-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--bg, #f8fafc);
+}
+.comp-result-type { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--muted); }
+.comp-result-status { font-size: 12px; font-weight: 700; }
+.comp-result-status.ok   { color: #16a34a; }
+.comp-result-status.warn { color: #d97706; }
+.comp-result-status.err  { color: #dc2626; }
+
+/* ── Upload drop zone ────────────────────────────────────── */
+.doc-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  margin-bottom: 12px;
+}
+.doc-dropzone:hover, .doc-dropzone.drag { background: #eff6ff; border-color: var(--accent); }
+.doc-dropzone input[type=file] { display: none; }
+
+/* ── Header ──────────────────────────────────────────────── */
+.dd-header {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 22px;
+  margin-bottom: 20px;
+}
+.dd-po { font-family: var(--mono); font-size: 22px; font-weight: 900; color: var(--text); }
+.dd-status-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 13px; border-radius: 999px; font-size: 12px; font-weight: 700;
+}
+.dd-status-badge.blue   { background: #dbeafe; color: #1e40af; }
+.dd-status-badge.amber  { background: #fef3c7; color: #b45309; }
+.dd-status-badge.green  { background: #dcfce7; color: #15803d; }
+.dd-status-badge.gray   { background: #f1f5f9; color: #64748b; }
+.dd-status-badge.red    { background: #fee2e2; color: #b91c1c; }
+
+/* Karta bieżącego statusu pod stepperem — badge + krótki opis */
+.dd-status-card { text-align:center; margin:-2px auto 16px; max-width:560px;
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:12px 16px; box-shadow:0 2px 8px rgba(0,0,0,.05); }
+.dd-status-desc { font-size:12.5px; color:var(--muted); line-height:1.5; margin-top:8px; }
+
+/* ── Stepper: etykiety pod kątem, kroki ZAWIJANE (bez poziomego suwaka) + gałąź jak w git ── */
+.dd-stepper {
+  display: flex; flex-wrap: wrap; align-items: flex-start;
+  row-gap: 6px; padding-bottom: 10px; margin-bottom: 0;
+}
+/* każdy krok rezerwuje miejsce na kątową etykietę (padding-bottom), więc po
+   zawinięciu etykiety jednego wiersza nie nachodzą na kółka następnego. */
+.dd-fstep { display: flex; flex-direction: column; align-items: center;
+  flex: 0 0 92px; width: 92px; padding-bottom: 78px; text-align: center;
+  position: relative; z-index: 1; }
+/* linia łącząca do następnego kółka (ukryta na ostatnim kroku) */
+.dd-fstep::after {
+  content: ""; position: absolute; top: 13px; left: 50%; width: 100%; height: 2px;
+  background: var(--border); z-index: 0;
+}
+.dd-fstep:last-child::after { display: none; }
+.dd-fstep.reached::after { background: #16a34a; }
+.dd-fcircle {
+  position: relative; z-index: 1;
+  width: 28px; height: 28px; border-radius: 50%; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; border: 2px solid var(--border);
+  background: #fff; color: var(--muted); flex: 0 0 auto;
+}
+.dd-fcircle.reached { background: #16a34a; border-color: #16a34a; color: #fff; }   /* osiągnięte = zielone ✓ */
+.dd-fcircle.active.c-green { background:#16a34a; border-color:#16a34a; color:#fff; }
+.dd-fcircle.active.c-amber { background:#f59e0b; border-color:#f59e0b; color:#fff; }
+.dd-fcircle.active.c-red   { background:#dc2626; border-color:#dc2626; color:#fff; }
+.dd-fcircle.active.c-blue  { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+.dd-fcircle.active.c-gray  { background:#94a3b8; border-color:#94a3b8; color:#fff; }
+.dd-fcircle.active { box-shadow: 0 0 0 3px rgba(37,99,235,.25); }
+/* etykiety pod kątem 45° — mieszczą się bez rozjeżdżania */
+.dd-flbl { position:absolute; top:33px; left:calc(50% - 2px);
+  transform: rotate(45deg); transform-origin: left top; white-space: nowrap;
+  font-size:10px; line-height:1.1; color:var(--muted); font-weight:600;
+  max-width:150px; overflow:hidden; text-overflow:ellipsis; }
+.dd-fstep.reached .dd-flbl { color:var(--text); }
+.dd-fstep.active  .dd-flbl { color:var(--accent); font-weight:800; }
+/* Gałąź (artwork) — podpięta pod tor główny jak branch w git (elbow z lewej) */
+.dd-branch { position:relative; margin:0 0 12px 0; padding:10px 14px 4px 30px;
+  border-radius:10px; background:rgba(147,51,234,.06); }
+.dd-branch::before {
+  content:""; position:absolute; left:13px; top:-86px; width:16px; height:100px;
+  border-left:2px solid #9333ea; border-bottom:2px solid #9333ea;
+  border-bottom-left-radius:14px; pointer-events:none;
+}
+.dd-branch-lbl { font-size:11px; font-weight:800; letter-spacing:.4px;
+  text-transform:uppercase; color:#9333ea; margin-bottom:8px; }
+.dd-branch-row { display:flex; flex-wrap:wrap; row-gap:6px; }
+.dd-branch-row .dd-fstep { flex:0 0 92px; width:92px; }
+.dd-branch-row .dd-fstep::after { display:block; }
+.dd-branch-row .dd-fstep:last-child::after { display:none; }
+
+/* ── Info cards ─────────────────────────────────────────── */
+.dd-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.dd-info-card { background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 14px; }
+.dd-info-lbl { font-size: 10px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+.dd-info-val { font-size: 13px; font-weight: 600; color: var(--text); font-family: var(--mono); }
+.dd-info-val.empty { color: var(--muted); font-style: italic; font-family: inherit; font-weight: 400; }
+
+/* ── Log ────────────────────────────────────────────────── */
+.dd-log-item { display: flex; gap: 10px; margin-bottom: 8px; }
+.dd-log-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 4px; }
+.dd-log-text { font-size: 12px; color: var(--text); }
+.dd-log-meta { font-size: 11px; color: var(--muted); }
+
+/* ── Modal ──────────────────────────────────────────────── */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+.modal-box { background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 28px; width: 100%; max-width: 480px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.modal-title { font-size: 16px; font-weight: 800; color: var(--text); margin-bottom: 18px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.form-group label { font-size: 11px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .4px; }
+.form-group input, .form-group select, .form-group textarea {
+  padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg, #fff); color: var(--text); font-size: 13px; font-family: inherit; }
+.form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
+.modal-footer { display: flex; gap: 8px; justify-content: flex-end;
+  margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+
+[x-cloak] { display: none !important; }
+
+/* ── Podgląd dokumentu: karta otwierająca + viewer pełnoekranowy ──────────── */
+.dv-open-card {
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 26px 16px; margin-bottom: 8px; cursor: pointer;
+  border: 1px dashed var(--border); border-radius: 8px; background: #f8fafc;
+  color: var(--accent); transition: background .15s, border-color .15s;
+}
+.dv-open-card:hover { background: #eef2ff; border-color: var(--accent); }
+.dv-open-card-t { font-size: 13px; font-weight: 600; }
+.dv-open-card-s { font-size: 11px; color: var(--muted); }
+.dv-newtab-link { display: block; text-align: center; font-size: 11.5px;
+  color: var(--muted); text-decoration: none; margin-bottom: 14px; }
+.dv-newtab-link:hover { color: var(--accent); }
+
+.dv-overlay {
+  position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column;
+  background: rgba(15, 23, 42, .92); backdrop-filter: blur(2px);
+}
+.dv-overlay[hidden] { display: none; }
+.dv-toolbar {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  background: #0f172a; color: #e2e8f0; flex-shrink: 0; font-size: 13px;
+}
+.dv-toolbar .dv-title { font-weight: 600; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 40vw; }
+.dv-toolbar .dv-spacer { flex: 1; }
+.dv-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-width: 34px; height: 32px; padding: 0 10px; border-radius: 7px;
+  border: 1px solid #334155; background: #1e293b; color: #e2e8f0; cursor: pointer;
+  font-size: 13px; text-decoration: none; user-select: none;
+}
+.dv-btn:hover { background: #334155; }
+.dv-zoom-label { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
+.dv-stage {
+  flex: 1; overflow: auto; padding: 24px; text-align: center;
+  scroll-behavior: auto; overscroll-behavior: contain;
+}
+.dv-content { display: inline-flex; flex-direction: column; align-items: center; gap: 14px; }
+.dv-content canvas, .dv-content img {
+  background: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.45); border-radius: 2px;
+  display: block; max-width: none;
+}
+.dv-loading, .dv-error { color: #cbd5e1; font-size: 14px; padding: 40px; }
+.dv-error a { color: #93c5fd; }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<div style="display:flex;align-items:center;gap:6px;font-size:14px">
+  <a href="/dostawy" style="color:var(--muted);text-decoration:none;font-weight:500">Dostawy</a>
+  <i data-lucide="chevron-right" style="width:13px;height:13px;color:var(--muted)"></i>
+  <span style="font-weight:700;color:var(--text);font-family:var(--mono)">{{ item.nr_zamowienia }}</span>
+</div>
+{% endblock %}
+
+{% block content %}
+{% set cur_status = item.status or 'utworzone' %}
+{% set BADGE_MAP = {
+  'utworzone':'gray','wyslane_do_dostawcy':'gray','proforma_oczekiwana':'gray',
+  'proforma_otrzymana':'amber','proforma_zaladowana':'amber','zweryfikowane':'amber',
+  'sprawdzone_zgodne':'green','sprawdzone_do_weryfikacji':'amber','sprawdzone_niezgodne':'red',
+  'artwork_oczekiwanie':'amber','zatwierdzone_do_wyplyniecia':'amber',
+  'artwork_master_zaladowany':'amber','artwork_czeka_fabryczny':'amber',
+  'artwork_brak_mastera':'red',
+  'artwork_zgodne':'green','artwork_niezgodne':'amber','artwork_bledne':'red',
+  'etd_sap':'blue','zlecenie_spedycja':'blue','agent_przypisany':'blue',
+  'packing_list_oczekiwanie':'amber','packing_list_otrzymany':'blue',
+  'dokumenty_odprawa':'blue','dostawa_przychodzaca':'blue','dokumenty_wyslane_odprawa':'blue',
+  'sad_draft':'amber','pzc_agencja':'blue','dostawa_magazyn':'amber',
+  'rozliczenie_fiori':'amber','rozliczenie_transportu':'green',
+  'zaokretowane':'blue','w_transporcie':'blue','na_miejscu':'blue','w_odprawie':'blue',
+  'po_odprawie':'blue','w_magazynie':'amber','dostarczone':'green',
+  'do_rozliczenia':'amber','rozliczone':'green',
+} %}
+
+<div x-data="dostawaApp()" x-cloak @click.self="closeDrawer()">
+
+  {# ── Header ── #}
+  <div class="dd-header">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div class="dd-po">{{ item.nr_zamowienia }}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:3px">
+          {{ item.supplier_name or '' }}
+          {% if item.supplier_code %} · <span style="font-family:var(--mono)">{{ item.supplier_code }}</span>{% endif %}
+          {% if not item.supplier_name and not item.supplier_code %}
+            <span style="font-style:italic">Dostawca nie podany</span>
+          {% endif %}
+        </div>
+        {% if item.supplier_code %}
+        <div style="font-size:12px;margin-top:3px">
+          {% if supplier_email %}
+            <span style="color:var(--muted)">📧 Odbiorca zamówienia: <b>{{ supplier_email }}</b></span>
+          {% else %}
+            <span style="color:#b45309;font-style:italic">📧 Brak e-maila dostawcy — uzupełnij w
+              <a href="/suppliers/master" target="_blank" rel="noopener" style="color:var(--accent)">Master danych dostawców</a>, aby wysłać zamówienie.</span>
+          {% endif %}
+        </div>
+        {% endif %}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <span class="dd-status-badge {{ BADGE_MAP.get(cur_status,'gray') }}">
+            {{ status_labels.get(cur_status, cur_status) }}
+          </span>
+          {% if item.priorytet == 'pilny' %}<span class="dd-status-badge red">⚡ Pilne</span>{% endif %}
+          {% if item.artwork_status == 'zatwierdzony' %}<span class="dd-status-badge green" style="font-size:11px">Artwork ✓</span>{% endif %}
+          {% if item.artwork_status == 'uwagi' %}<span class="dd-status-badge red" style="font-size:11px">Artwork: uwagi</span>{% endif %}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        {% if next_status %}
+        <button class="btn btn-sm {% if needs_approval %}btn-warning{% else %}btn-primary{% endif %}"
+                @click="advanceOpen=true">
+          {% if needs_approval %}✅ {% endif %}{{ next_label }}
+        </button>
+        {% endif %}
+        {% if can_revert %}
+        <button class="btn btn-sm btn-ghost" @click="doRevert()"
+                title="Cofnij status o jeden etap do: {{ prev_label }}">
+          <i data-lucide="undo-2" style="width:13px;height:13px"></i> Cofnij
+        </button>
+        {% endif %}
+        {% if role in ['manager','admin','superuser'] %}
+        <button class="btn btn-sm btn-ghost" @click="forceStatus='{{ cur_status }}'; forceOpen=true"
+                title="Ręcznie ustaw dowolny status (z pominięciem ścieżki)">
+          <i data-lucide="settings-2" style="width:13px;height:13px"></i> Zmień status
+        </button>
+        {% endif %}
+        <button class="btn btn-sm btn-ghost" @click="editOpen=true">
+          <i data-lucide="pencil" style="width:13px;height:13px"></i> Edytuj
+        </button>
+        {% if role in ['manager','admin','superuser'] and item.supplier_code %}
+        <button class="btn btn-sm btn-primary" @click="openSend()"
+                title="Wyślij zamówienie na e-mail dostawcy">
+          <i data-lucide="mail" style="width:13px;height:13px"></i> Wyślij do dostawcy
+        </button>
+        {% endif %}
+        {% if role == 'admin' %}
+        <button type="button" class="btn btn-sm btn-ghost" style="color:var(--error,#dc2626);border-color:var(--error,#dc2626)"
+                @click="deleteDostawa()" title="Usuń dostawę (tylko admin)">
+          <i data-lucide="trash-2" style="width:14px;height:14px"></i> Usuń
+        </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Stepper dwutorowy: tor główny (zawijany) + gałąź ARTWORK ── #}
+  {% set ns_st = namespace(main=[], art=[], mi=0) %}
+  {% for st in steps %}
+    {% if st.track == 'artwork' %}
+      {% set _ = ns_st.art.append((loop.index0, st)) %}
+    {% else %}
+      {% set ns_st.mi = ns_st.mi + 1 %}
+      {% set _ = ns_st.main.append((loop.index0, ns_st.mi, st)) %}
+    {% endif %}
+  {% endfor %}
+
+  <div class="dd-stepper">
+    {% for gi, num, st in ns_st.main %}
+    {% set reached = (cur_step_index >= 0 and gi <= cur_step_index) %}
+    {% set is_active = (gi == cur_step_index) %}
+    <div class="dd-fstep {{ 'active' if is_active else ('reached' if reached else '') }}">
+      <div class="dd-fcircle {{ 'reached' if (reached and not is_active) else '' }} {{ ('active c-' ~ BADGE_MAP.get(cur_status,'blue')) if is_active else '' }}"
+           title="{{ st.label }}">
+        {% if reached and not is_active %}✓{% else %}{{ num }}{% endif %}
+      </div>
+      <div class="dd-flbl">{{ st.label }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if ns_st.art %}
+  <div class="dd-branch">
+    <div class="dd-branch-lbl">⤷ Gałąź ARTWORK (równolegle, od kroku 1)</div>
+    <div class="dd-stepper dd-branch-row">
+      {% for gi, st in ns_st.art %}
+      {% set reached = (cur_step_index >= 0 and gi <= cur_step_index) %}
+      {% set is_active = (gi == cur_step_index) %}
+      <div class="dd-fstep {{ 'active' if is_active else ('reached' if reached else '') }}">
+        <div class="dd-fcircle {{ 'reached' if (reached and not is_active) else '' }} {{ ('active c-' ~ BADGE_MAP.get(cur_status,'blue')) if is_active else '' }}"
+             title="{{ st.label }}">
+          {% if reached and not is_active %}✓{% else %}{{ ['A','B','C','D','E'][loop.index0] }}{% endif %}
+        </div>
+        <div class="dd-flbl">{{ st.label }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# Status bieżący — bezpośrednio pod ścieżką: badge + krótki opis co dalej #}
+  <div class="dd-status-card">
+    <span class="dd-status-badge {{ BADGE_MAP.get(cur_status,'gray') }}" style="font-size:13px;padding:5px 16px">
+      {{ status_labels.get(cur_status, cur_status) }}
+    </span>
+    {% set _cur_desc = status_descriptions.get(cur_status, '') if status_descriptions else '' %}
+    {% if _cur_desc %}<div class="dd-status-desc">{{ _cur_desc }}</div>{% endif %}
+  </div>
+
+  {# Powiadomienie: w bazie jest nowsza POTWIERDZONA wersja mastera niż podpięta.
+     Tylko sygnał — wzorzec nie jest podmieniany automatycznie. #}
+  {% if artwork_newer_master %}
+  <div class="dd-status-card" style="border-left:4px solid #f59e0b;background:#fffbeb">
+    <span class="dd-status-badge amber" style="font-size:13px;padding:5px 16px">⚠ Nowsza wersja mastera</span>
+    <div class="dd-status-desc">
+      W bazie artworków jest <b>nowsza potwierdzona wersja</b> wzorca niż obecnie podpięta.
+      Master nie został podmieniony automatycznie — jeśli chcesz użyć nowszej, usuń podpięty
+      ARTWORK i wejdź ponownie w „Oczekiwanie na artwork”, albo podepnij nową wersję ręcznie.
+    </div>
+  </div>
+  {% endif %}
+
+  {# Master potwierdzony w indeksie, ale jego PLIK nie jest na serwerze (biblioteka
+     w trybie „tylko miniatura" — sam z_path). Auto-podpięcie niemożliwe. #}
+  {% if artwork_master_no_file %}
+  <div class="dd-status-card" style="border-left:4px solid #3b82f6;background:#eff6ff">
+    <span class="dd-status-badge blue" style="font-size:13px;padding:5px 16px">ℹ Master bez pliku na serwerze</span>
+    <div class="dd-status-desc">
+      Wzorzec jest <b>potwierdzony</b> w bazie artworków, ale jego plik PDF nie został
+      zsynchronizowany do biblioteki (jest tylko miniatura / ścieżka sieciowa). Dlatego nie
+      podpiął się automatycznie. Zsynchronizuj pełny plik do biblioteki albo wgraj wzorzec
+      ręcznie jako „Artwork wzorzec”, by ruszyć z porównaniem.
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Quick info ── #}
+  <div class="dd-info-grid">
+    <div class="dd-info-card">
+      <div class="dd-info-lbl">Kontener</div>
+      <div class="dd-info-val {% if not item.numer_kontenera %}empty{% endif %}">{{ item.numer_kontenera or '—' }}</div>
+    </div>
+    <div class="dd-info-card">
+      <div class="dd-info-lbl">ETA</div>
+      <div class="dd-info-val {% if not item.eta %}empty{% endif %}">{{ item.eta or '—' }}</div>
+    </div>
+    <div class="dd-info-card">
+      <div class="dd-info-lbl">ETD</div>
+      <div class="dd-info-val {% if not (item.etd_plan or item.planowane_etd) %}empty{% endif %}">{{ item.etd_plan or item.planowane_etd or '—' }}</div>
+    </div>
+    <div class="dd-info-card">
+      <div class="dd-info-lbl">Transport</div>
+      <div class="dd-info-val {% if not item.rodzaj_transportu %}empty{% endif %}">{{ item.rodzaj_transportu or '—' }}</div>
+    </div>
+    {% if item.proforma_lot %}
+    <div class="dd-info-card">
+      <div class="dd-info-lbl">LOT / Batch</div>
+      <div class="dd-info-val">{{ item.proforma_lot }}</div>
+    </div>
+    {% endif %}
+    {% if item.proforma_data_waznosci %}
+    <div class="dd-info-card">
+      <div class="dd-info-lbl">Data ważności</div>
+      <div class="dd-info-val">{{ item.proforma_data_waznosci }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Zakładki szczegółów dostawy ── #}
+  <style>
+    .dd-tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:2px solid var(--border);margin:18px 0 18px}
+    .dd-tab{appearance:none;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;
+            padding:9px 18px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;border-radius:8px 8px 0 0}
+    .dd-tab:hover{color:var(--text);background:rgba(127,127,127,.06)}
+    .dd-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+    .dd-report-frame{width:100%;height:78vh;border:1px solid var(--border);border-radius:10px;background:#fff}
+    .dd-rep-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);
+                border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--surface)}
+    .dd-rep-row:hover{border-color:var(--accent)}
+    .dd-rep-row.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  </style>
+  <div class="dd-tabs" role="tablist">
+    <button type="button" class="dd-tab" :class="{active: activeTab==='przeglad'}" @click="setTab('przeglad')" role="tab">📋 Przegląd</button>
+    <button type="button" class="dd-tab" :class="{active: activeTab==='raporty'}" @click="setTab('raporty')" role="tab">📊 Raporty</button>
+    <button type="button" class="dd-tab" :class="{active: activeTab==='transport'}" @click="setTab('transport')" role="tab">🚚 Transport</button>
+    <button type="button" class="dd-tab" :class="{active: activeTab==='historia'}" @click="setTab('historia')" role="tab">🕘 Historia</button>
+  </div>
+
+  {# ════ ZAKŁADKA: PRZEGLĄD ════ #}
+  <div x-show="activeTab==='przeglad'">
+
+  {# ── Documents section ── #}
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div>
+      <span style="font-size:15px;font-weight:800;color:var(--text)">Dokumenty</span>
+      <span style="font-size:12px;color:var(--muted);margin-left:8px">
+        {% set n_uploaded = doc_slots | selectattr('files') | list | length %}
+        {{ n_uploaded }}/{{ doc_slots|length }} załadowanych
+        {% if missing_slot_labels %}
+          <span style="color:#dc2626;font-weight:600">· brakuje: {{ missing_slot_labels | join(', ') }}</span>
+        {% else %}
+          <span style="color:#16a34a;font-weight:600">· komplet ✓</span>
+        {% endif %}
+      </span>
+    </div>
+    <button class="btn btn-sm btn-primary" @click="uploadOpen=true">
+      <i data-lucide="upload" style="width:13px;height:13px"></i> Wgraj dokument
+    </button>
+  </div>
+
+  {# ── Ostrzeżenie: pliki w rejestrze, ale brak ich na dysku ── #}
+  {% set _missing_slots = doc_slots | selectattr('missing_file') | list %}
+  {% if _missing_slots %}
+  <div class="dd-deleted-banner">
+    <i data-lucide="alert-triangle" style="width:16px;height:16px;flex-shrink:0;margin-top:1px"></i>
+    <div>
+      <strong>Uwaga: brak pliku na dysku</strong> dla:
+      {{ _missing_slots | map(attribute='type') | join(', ') }}.
+      Rekord jest w bazie, ale samego pliku nie ma.
+      {% if deleted_docs %}
+        Ostatnie usunięcia:
+        {% for d in deleted_docs[:3] %}
+          <span style="white-space:nowrap">{{ d.username }} ({{ (d.created_at or '')[:16] }}){% if not loop.last %},{% endif %}</span>
+        {% endfor %}.
+      {% else %}
+        W audycie nie ma usunięcia przez użytkownika — plik mógł zniknąć przy redeployu bez trwałego wolumenu.
+      {% endif %}
+      Wgraj plik ponownie, aby przywrócić podgląd i porównania.
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Tile grid ── #}
+  {# Build slot map for easy lookup #}
+  {% set ns = namespace() %}
+  {% for s in doc_slots %}
+    {% if s.type == 'PO' %}{% set ns.po = s %}
+    {% elif s.type == 'PI' %}{% set ns.pi = s %}
+    {% elif s.type == 'CI' %}{% set ns.ci = s %}
+    {% elif s.type == 'PL' %}{% set ns.pl = s %}
+    {% elif s.type == 'BL' %}{% set ns.bl = s %}
+    {% elif s.type == 'ARTWORK' %}{% set ns.aw = s %}
+    {% elif s.type == 'ARTWORK_B' %}{% set ns.awb = s %}
+    {% elif s.type == 'SAD' %}{% set ns.sad = s %}
+    {% endif %}
+  {% endfor %}
+
+  {# Reusable tile macro #}
+  {% macro tile(slot) %}
+  {% set pf = (slot.files | selectattr('exists') | list | first) if slot.files else None %}
+  <div class="doc-tile" :class="activeSlot==='{{ slot.type }}'?'active':''"
+       title="Kliknij, aby otworzyć · przeciągnij plik tutaj, aby wgrać jako {{ slot.type }}"
+       @click="{% if pf %}window.openDocViewer('/api/dostawy/'+window._PO_NR+'/documents/{{ pf.id }}/view', '{{ slot.type }} — {{ slot.label }}'){% else %}openSlot('{{ slot.type }}'){% endif %}"
+       @dragover.prevent="$el.classList.add('drag')"
+       @dragleave="$el.classList.remove('drag')"
+       @drop.prevent="$el.classList.remove('drag'); handleDrop($event, '{{ slot.type }}')">
+    <div class="doc-led {{ slot.led }}"></div>
+    <div class="doc-icon-wrap" style="background:{{ slot.bg }}">
+      <i data-lucide="{{ slot.icon }}" style="width:24px;height:24px;color:{{ slot.color }}"></i>
+    </div>
+    <div class="doc-type-code" style="color:{{ slot.color }}">{{ 'AW-FAB' if slot.type=='ARTWORK_B' else slot.type }}</div>
+    <div class="doc-type-label">{{ slot.label }}</div>
+    {% if slot.missing_file %}
+      <div class="doc-missing-txt" title="Plik jest w rejestrze, ale nie ma go na dysku">⚠ Plik niedostępny</div>
+      <div class="doc-missing-sub">rekord jest, pliku brak</div>
+    {% elif slot.files %}
+      <div class="doc-filename has-file" title="{{ slot.files[0].original_name or slot.files[0].filename }}">
+        {{ (slot.files[0].original_name or slot.files[0].filename) | truncate(22, true, '…') }}
+      </div>
+      {% if slot.files|length > 1 %}
+      <div style="font-size:9.5px;color:var(--muted)">+{{ slot.files|length - 1 }} więcej</div>
+      {% endif %}
+    {% else %}
+      <div class="doc-filename" style="font-style:italic">Brak pliku</div>
+    {% endif %}
+    {% if slot.comps %}
+    <div class="doc-comp-chips">
+      {% for c in slot.comps[:2] %}
+      {% set chip_cls = 'ok' if c.status=='ok' else ('warn' if c.status=='warning' else ('err' if c.status in ['error','critical'] else 'pend')) %}
+      <div class="doc-comp-chip {{ chip_cls }}">
+        <div class="doc-comp-dot"></div>
+        <span>{{ c.doc_type }}</span>
+        {% if c.diff_count is not none %}<span>·{{ c.diff_count }}</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if slot.nonadj_compare %}
+    <div style="margin-top:4px">
+      <span class="doc-compare-badge {{ slot.nonadj_status or 'none' }}"
+            title="Porównywane z {{ slot.nonadj_compare }}" style="font-size:9px">
+        ⇄ {{ slot.nonadj_compare }}
+      </span>
+    </div>
+    {% endif %}
+    <button type="button" class="doc-upload-hint" style="background:none;border:none;cursor:pointer;font:inherit"
+            @click.stop="openSlot('{{ slot.type }}')">⚙ zarządzaj</button>
+  </div>
+  {% endmacro %}
+
+  {# Connector macro #}
+  {% macro connector(conn_status, label='') %}
+  {% set _cls = conn_status or 'none' %}
+  {% set _icon = '✓' if _cls=='ok' else ('⚠' if _cls=='warn' else ('✕' if _cls=='err' else '⇄')) %}
+  <div class="doc-compare-connector">
+    <i data-lucide="arrow-left-right" class="doc-compare-arrow-icon"></i>
+    <span class="doc-compare-badge {{ _cls }}">{{ _icon }}{% if label %} {{ label }}{% endif %}</span>
+  </div>
+  {% endmacro %}
+
+  <div class="doc-grid">
+
+    {# ── PO ⇄ PI ── #}
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="doc-compare-pair">
+        {{ tile(ns.po) }}
+        {{ connector(ns.po.conn_status, 'PI/PO') }}
+        {{ tile(ns.pi) }}
+      </div>
+      {% if can_verify %}
+      <button class="btn btn-sm btn-primary" @click="doVerifyPoPi()" :disabled="verifying"
+              style="align-self:center" title="Porównaj PO (lewa) ↔ PI (prawa), zapisz raport i ustaw status">
+        <i data-lucide="git-compare" style="width:13px;height:13px"></i>
+        <span x-show="!verifying">{% if verified %}Porównaj ponownie{% else %}Weryfikuj PO/PI{% endif %}</span>
+        <span x-show="verifying">Porównuję…</span>
+      </button>
+      {% endif %}
+      {% for rd in report_docs if rd.doc_type == 'RAPORT_PO_PI' %}
+      <div style="display:flex;align-items:center;gap:4px;border:1px solid #fecaca;border-radius:8px;background:#fff5f5;padding-right:4px">
+        <a href="/api/dostawy/{{ item.nr_zamowienia }}/documents/{{ rd.id }}/view" target="_blank"
+           title="{{ rd.original_name }}"
+           style="display:flex;align-items:center;gap:6px;padding:6px 10px;text-decoration:none;color:var(--text)">
+          <i data-lucide="file-text" style="width:15px;height:15px;color:#dc2626"></i>
+          <span style="font-size:11.5px;font-weight:600">Raport PO/PI</span>
+          <span style="font-size:10px;color:var(--muted)">{{ (rd.uploaded_at or '')[:10] }}</span>
+        </a>
+        <button type="button" @click="deleteDoc({{ rd.id }})" title="Usuń raport"
+                style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:14px;line-height:1;padding:2px 4px">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# ── CI ⇄ PL ── #}
+    <div class="doc-compare-pair">
+      {{ tile(ns.ci) }}
+      {{ connector(ns.ci.conn_status, 'CI/PL') }}
+      {{ tile(ns.pl) }}
+    </div>
+
+    {# ── BL ── #}
+    {{ tile(ns.bl) }}
+
+    {# ── Artwork wzorzec ⇄ Artwork fabryczny ── #}
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="doc-compare-pair">
+        {{ tile(ns.aw) }}
+        {{ connector(ns.aw.conn_status, 'AW') }}
+        {{ tile(ns.awb) }}
+      </div>
+      {% if can_verify_artwork %}
+      <button class="btn btn-sm btn-primary" @click="doVerifyArtwork()" :disabled="verifyingArt"
+              style="align-self:center" title="Porównaj Artwork wzorzec ↔ fabryczny, zapisz raport i ustaw status">
+        <i data-lucide="palette" style="width:13px;height:13px"></i>
+        <span x-show="!verifyingArt">{% if verified_artwork %}Porównaj ponownie{% else %}Weryfikuj Artwork{% endif %}</span>
+        <span x-show="verifyingArt">Porównuję…</span>
+      </button>
+      {% endif %}
+      {% for rd in report_docs if rd.doc_type == 'RAPORT_ARTWORK' %}
+      <div style="display:flex;align-items:center;gap:4px;border:1px solid #e9d5ff;border-radius:8px;background:#faf5ff;padding-right:4px">
+        <a href="/api/dostawy/{{ item.nr_zamowienia }}/documents/{{ rd.id }}/view" target="_blank"
+           title="{{ rd.original_name }}"
+           style="display:flex;align-items:center;gap:6px;padding:6px 10px;text-decoration:none;color:var(--text)">
+          <i data-lucide="palette" style="width:15px;height:15px;color:#9333ea"></i>
+          <span style="font-size:11.5px;font-weight:600">Raport Artwork</span>
+          <span style="font-size:10px;color:var(--muted)">{{ (rd.uploaded_at or '')[:10] }}</span>
+        </a>
+        <button type="button" @click="deleteDoc({{ rd.id }})" title="Usuń raport"
+                style="background:none;border:none;cursor:pointer;color:#9333ea;font-size:14px;line-height:1;padding:2px 4px">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# ── SAD ── #}
+    {{ tile(ns.sad) }}
+
+  </div>
+  </div>{# ════ /ZAKŁADKA: PRZEGLĄD (Dokumenty) ════ #}
+
+  {# ════ ZAKŁADKA: RAPORTY ════ #}
+  <div x-show="activeTab==='raporty'" style="margin-bottom:24px">
+    {% set _rep_comps = comparisons | selectattr('doc_type', 'in', ['PO_vs_PI','CI_PL']) | list %}
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+      <div style="flex:0 0 300px;max-width:340px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px">
+          Raporty porównań ({{ _rep_comps|length }})
+        </div>
+        {% if not _rep_comps %}
+        <div style="color:var(--muted);font-size:13px;padding:14px;border:1px dashed var(--border);border-radius:8px">
+          Brak raportów. Wgraj PO i PI — po porównaniu raport pojawi się tutaj.
+        </div>
+        {% endif %}
+        {% for c in _rep_comps %}
+        {% set cs = c.status %}
+        {% set cb = 'green' if cs in ('ok','sprawdzone_zgodne') else ('red' if cs in ('blad','error','critical') else 'amber') %}
+        {% set cl = 'ZGODNE' if cs in ('ok','sprawdzone_zgodne') else ('NIEZGODNE' if cs in ('blad','error','critical') else 'DO WERYF.') %}
+        <div class="dd-rep-row" :class="{sel: reportCid==={{ c.id }}}" @click="openReport({{ c.id }})">
+          <span class="dd-status-badge {{ cb }}" style="font-size:10px;padding:3px 8px">{{ cl }}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:12.5px">{{ c.doc_type|replace('_',' ') }}</div>
+            <div style="font-size:11px;color:var(--muted)">{{ (c.created_at|string)[:16] }} · {{ c.diff_count or 0 }} różnic</div>
+          </div>
+          {% if role in ['superuser','admin'] %}
+          <button type="button" @click.stop="deleteReport({{ c.id }})" title="Usuń raport z historii"
+                  style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:15px;line-height:1;padding:2px 6px">✕</button>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <div style="flex:1;min-width:320px">
+        <template x-if="reportCid">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span style="font-size:12px;color:var(--muted)">Podgląd raportu (HTML)</span>
+              <a class="btn btn-sm" :href="'/dostawy/{{ item.nr_zamowienia }}/raport/'+reportCid" target="_blank"
+                 style="text-decoration:none">↗ Otwórz w nowej karcie</a>
+            </div>
+            <iframe class="dd-report-frame" :src="'/dostawy/{{ item.nr_zamowienia }}/raport/'+reportCid" title="Raport porównania"></iframe>
+          </div>
+        </template>
+        <template x-if="!reportCid">
+          <div style="color:var(--muted);font-size:13px;padding:40px;text-align:center;border:1px dashed var(--border);border-radius:10px">
+            Wybierz raport z listy po lewej, aby zobaczyć go tutaj.
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>{# ════ /ZAKŁADKA: RAPORTY ════ #}
+
+  {# ── Slide-over drawer ── #}
+  <div class="doc-drawer-overlay" x-show="drawerOpen" @click.self="closeDrawer()"
+       style="display:none" x-transition.opacity>
+    <div class="doc-drawer" @click.stop>
+      <div class="doc-drawer-head">
+        <div class="doc-icon-wrap" style="width:32px;height:32px;border-radius:8px"
+             :style="'background:'+currentSlot.bg">
+          <i :data-lucide="currentSlot.icon"
+             :style="'width:16px;height:16px;color:'+currentSlot.color"></i>
+        </div>
+        <div class="doc-drawer-title">
+          <span x-text="currentSlot.type" style="font-family:var(--mono)"></span>
+          <span x-text="' — '+currentSlot.label" style="font-weight:400;color:var(--muted);font-size:13px"></span>
+        </div>
+        <button class="btn-icon btn-subtle" @click="closeDrawer()" aria-label="Zamknij">
+          <i data-lucide="x" style="width:16px;height:16px"></i>
+        </button>
+      </div>
+
+      <div class="doc-drawer-body">
+
+        {# Preview of first file — otwiera viewer w wysokiej jakości (zoom scrollem) #}
+        <template x-if="currentSlot.files && currentSlot.files.length > 0 && previewId">
+          <div>
+            <button type="button" class="dv-open-card"
+                    @click="window.openDocViewer('/api/dostawy/{{ item.nr_zamowienia }}/documents/'+previewId+'/view', ((currentSlot.files||[]).find(x=>x.id===previewId)||{}).original_name || 'Dokument')">
+              <i data-lucide="eye" style="width:20px;height:20px"></i>
+              <span class="dv-open-card-t">Otwórz podgląd w wysokiej jakości</span>
+              <span class="dv-open-card-s">pełny ekran · zoom scrollem</span>
+            </button>
+            <a :href="'/api/dostawy/{{ item.nr_zamowienia }}/documents/'+previewId+'/view'"
+               target="_blank" class="dv-newtab-link">↗ albo otwórz w nowej karcie</a>
+          </div>
+        </template>
+
+        {# Files list #}
+        <div style="margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;
+               letter-spacing:.5px;margin-bottom:8px">Pliki</div>
+          <template x-if="currentSlot.files && currentSlot.files.length === 0">
+            <div style="color:var(--muted);font-size:13px;font-style:italic;padding:8px 0">
+              Brak wgranych plików dla tego typu dokumentu
+            </div>
+          </template>
+          <template x-for="f in (currentSlot.files || [])" :key="f.id">
+            <div class="doc-file-row">
+              <i data-lucide="file" style="width:14px;height:14px;color:var(--muted);flex-shrink:0"></i>
+              <div class="doc-file-name" x-text="f.original_name || f.filename"></div>
+              <span x-show="f.exists === false" title="Pliku nie ma na dysku"
+                    style="color:#dc2626;font-size:10px;font-weight:700;white-space:nowrap">⚠ brak na dysku</span>
+              <div class="doc-file-size" x-text="fmtSize(f.file_size)"></div>
+              <div class="doc-file-actions">
+                <a :href="'/api/dostawy/{{ item.nr_zamowienia }}/documents/'+f.id+'/view'"
+                   target="_blank" class="doc-file-btn" title="Otwórz w nowej karcie">
+                  <i data-lucide="external-link" style="width:11px;height:11px"></i>
+                </a>
+                <button class="doc-file-btn" title="Podgląd w wysokiej jakości"
+                        @click="previewId=f.id; window.openDocViewer('/api/dostawy/{{ item.nr_zamowienia }}/documents/'+f.id+'/view', f.original_name||f.filename)">
+                  <i data-lucide="eye" style="width:11px;height:11px"></i>
+                </button>
+                <button class="doc-file-btn danger" title="Usuń" @click="deleteDoc(f.id)">
+                  <i data-lucide="trash-2" style="width:11px;height:11px"></i>
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        {# Quick upload for this slot #}
+        <div class="doc-dropzone" @click="triggerUpload(currentSlot.type)"
+             @dragover.prevent="$el.classList.add('drag')"
+             @dragleave="$el.classList.remove('drag')"
+             @drop.prevent="handleDrop($event, currentSlot.type)">
+          <i data-lucide="upload-cloud" style="width:22px;height:22px;color:var(--muted);margin-bottom:6px"></i>
+          <div style="font-size:12px;color:var(--muted)">Kliknij lub przeciągnij plik</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">PDF, PNG, JPG, TIFF</div>
+          <input type="file" :id="'upload-'+currentSlot.type" accept=".pdf,.png,.jpg,.jpeg,.tiff"
+                 @change="uploadFile($event, currentSlot.type)">
+        </div>
+
+        {# Comparisons linked to this slot #}
+        <template x-if="currentSlot.comps && currentSlot.comps.length > 0">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;
+                 letter-spacing:.5px;margin-bottom:8px">Powiązane porównania</div>
+            <template x-for="c in currentSlot.comps" :key="c.id">
+              <div class="comp-result-card">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                  <span class="comp-result-type" x-text="c.doc_type"></span>
+                  <span class="comp-result-status"
+                        :class="c.status==='ok'?'ok':(c.status==='warning'?'warn':'err')"
+                        x-text="c.status==='ok'?'✓ OK':(c.status==='warning'?'⚠ Ostrzeżenia':'✕ Błędy')">
+                  </span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                  <span style="font-size:11px;color:var(--muted)" x-text="c.created_at?c.created_at.slice(0,10):''"></span>
+                  <span style="font-size:11px;color:var(--muted)" x-text="c.diff_count!==null?c.diff_count+' różnic':''"></span>
+                </div>
+                <a :href="'/history?search={{ item.nr_zamowienia }}'"
+                   style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600">
+                  Otwórz wyniki →
+                </a>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        {# CTA: Start comparison for this doc type #}
+        <template x-if="currentSlot.files && currentSlot.files.length > 0 && (!currentSlot.comps || currentSlot.comps.length===0)">
+          <div style="margin-top:8px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;
+                 letter-spacing:.5px;margin-bottom:8px">Porównania</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px">
+              Brak powiązanych porównań dla tego dokumentu.
+            </div>
+            <a href="/analyze?po={{ item.nr_zamowienia }}" class="btn btn-sm btn-subtle">
+              <i data-lucide="git-compare-arrows" style="width:13px;height:13px"></i>
+              Otwórz moduł porównania
+            </a>
+          </div>
+        </template>
+
+      </div>{# /drawer-body #}
+    </div>
+  </div>
+
+  {# ── Modal: Upload dokument ── #}
+  <div class="modal-bg" x-show="uploadOpen" @click.self="uploadOpen=false" style="display:none">
+    <div class="modal-box">
+      <div class="modal-title">↑ Wgraj dokument</div>
+      <div class="form-group">
+        <label>Typ dokumentu</label>
+        <select x-model="uploadForm.doc_type">
+          {% for slot in doc_slots %}
+          <option value="{{ slot.type }}">{{ slot.type }} — {{ slot.label }}</option>
+          {% endfor %}
+          <option value="OTHER">Inne</option>
+        </select>
+      </div>
+      <div class="doc-dropzone" style="margin-bottom:0"
+           @click="$refs.globalUploadInput.click()"
+           @dragover.prevent="$el.classList.add('drag')"
+           @dragleave="$el.classList.remove('drag')"
+           @drop.prevent="handleDrop($event, uploadForm.doc_type)">
+        <i data-lucide="upload-cloud" style="width:28px;height:28px;color:var(--muted);margin-bottom:8px"></i>
+        <div style="font-size:13px;color:var(--muted);font-weight:600" x-text="uploadForm.filename||'Kliknij lub przeciągnij plik'"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">PDF, PNG, JPG, TIFF</div>
+        <input type="file" x-ref="globalUploadInput" accept=".pdf,.png,.jpg,.jpeg,.tiff"
+               @change="uploadForm.file=$event.target.files[0]; uploadForm.filename=$event.target.files[0]?.name||''">
+      </div>
+      <div x-show="uploadErr" x-text="uploadErr"
+           style="color:var(--error);font-size:12px;font-weight:600;margin-top:8px" x-cloak></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="uploadOpen=false">Anuluj</button>
+        <button class="btn btn-primary" @click="doUpload()" :disabled="uploading">
+          <span x-show="uploading">Wgrywam…</span>
+          <span x-show="!uploading">Wgraj</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {# ── Modal: Wyślij do dostawcy ── #}
+  <div class="modal-bg" x-show="sendOpen" @click.self="sendOpen=false" style="display:none">
+    <div class="modal-box">
+      <div class="modal-title">📧 Wyślij zamówienie do dostawcy</div>
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">
+        <div style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px">Odbiorca</div>
+        <div><b x-text="sendSupplierName || 'Dostawca'"></b> — <span style="font-family:var(--mono)" x-text="sendRecipient"></span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">Zamówienie: {{ item.nr_zamowienia }}</div>
+      </div>
+      <div class="form-group">
+        <label>Temat</label>
+        <input type="text" x-model="sendSubject" maxlength="200">
+      </div>
+      <div class="form-group">
+        <label>Treść</label>
+        <textarea x-model="sendBody" rows="7" style="resize:vertical;font-size:13px"></textarea>
+      </div>
+      <p x-show="sendMsg" x-text="sendMsg" style="color:var(--error,#dc2626);font-size:12.5px;margin:4px 0"></p>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="sendOpen=false">Anuluj</button>
+        <button class="btn btn-primary" @click="doSend()" :disabled="sendBusy">
+          <span x-show="sendBusy">Wysyłam…</span>
+          <span x-show="!sendBusy">Wyślij do <span x-text="sendRecipient"></span></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {# ── Modal: Advance ── #}
+  <div class="modal-bg" x-show="advanceOpen" @click.self="advanceOpen=false" style="display:none">
+    <div class="modal-box">
+      <div class="modal-title">{% if needs_approval %}✅ Zatwierdzenie{% else %}Przesuń status{% endif %}</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+        <strong>→ {{ status_labels.get(next_status, next_label) if next_status else '—' }}</strong>
+      </p>
+      {% if missing_for_next_labels %}
+      <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12.5px;color:#92400e">
+        ⚠ Brak wymaganych dokumentów: <strong>{{ missing_for_next_labels | join(', ') }}</strong>.
+        Możesz kontynuować, ale upewnij się, że to świadoma decyzja.
+      </div>
+      {% endif %}
+      <div class="form-group">
+        <label>Notatka (opcjonalnie)</label>
+        <textarea x-model="advanceNote" rows="2" style="resize:none"
+                  placeholder="Dodatkowe informacje…"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="advanceOpen=false">Anuluj</button>
+        <button class="btn btn-primary" @click="doAdvance()" :disabled="advancing">
+          <span x-show="advancing">Zapisuję…</span>
+          <span x-show="!advancing">Potwierdź</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {# ── Modal: Ręczna zmiana statusu ── #}
+  {% if role in ['manager','admin','superuser'] %}
+  <div class="modal-bg" x-show="forceOpen" @click.self="forceOpen=false" style="display:none">
+    <div class="modal-box">
+      <div class="modal-title">⚙ Ręczna zmiana statusu</div>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">
+        Ustaw dowolny status bez przechodzenia przez ścieżkę krok po kroku —
+        np. oznacz „Wysłane do dostawcy" albo nadpisz wynik weryfikacji PO/PI na
+        „Sprawdzone — zgodne", aby przejść dalej. Zmiana zostanie zapisana w historii.
+      </p>
+      <div class="form-group">
+        <label>Nowy status</label>
+        <select x-model="forceStatus">
+          {% for ph in phases %}
+          <optgroup label="{{ loop.index }}. {{ ph.label }}">
+            {% for s in ph.statuses %}
+            <option value="{{ s }}">{{ status_labels.get(s, s) }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Notatka (opcjonalnie)</label>
+        <textarea x-model="forceNote" rows="2" style="resize:none"
+                  placeholder="Powód ręcznej zmiany…"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="forceOpen=false">Anuluj</button>
+        <button class="btn btn-primary" @click="doSetStatus()" :disabled="forcing">
+          <span x-show="forcing">Zapisuję…</span>
+          <span x-show="!forcing">Ustaw status</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Modal: Edit ── #}
+  <div class="modal-bg" x-show="editOpen" @click.self="editOpen=false" style="display:none">
+    <div class="modal-box" style="max-width:520px">
+      <div class="modal-title">Edytuj dostawę</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group">
+          <label>Dostawca</label>
+          <input type="text" x-model="editForm.supplier_name">
+        </div>
+        <div class="form-group">
+          <label>Kod dostawcy</label>
+          <input type="text" x-model="editForm.supplier_code" maxlength="20">
+        </div>
+        <div class="form-group">
+          <label>Priorytet</label>
+          <select x-model="editForm.priorytet">
+            <option value="normalny">Normalny</option>
+            <option value="pilny">⚡ Pilny</option>
+            <option value="spokojnie">Spokojnie</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Rodzaj transportu</label>
+          <select x-model="editForm.rodzaj_transportu">
+            <option value="">—</option>
+            <option value="40HQ">40HQ</option>
+            <option value="20DV">20DV</option>
+            <option value="LCL">LCL</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>ETD planowane</label>
+          <input type="date" x-model="editForm.planowane_etd">
+        </div>
+        <div class="form-group">
+          <label>Data dostawy</label>
+          <input type="date" x-model="editForm.data_dostawy">
+        </div>
+        <div class="form-group">
+          <label>LOT / Batch</label>
+          <input type="text" x-model="editForm.proforma_lot">
+        </div>
+        <div class="form-group">
+          <label>Data ważności</label>
+          <input type="date" x-model="editForm.proforma_data_waznosci">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Uwagi</label>
+        <textarea x-model="editForm.uwagi" rows="2" style="resize:vertical"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="editOpen=false">Anuluj</button>
+        <button class="btn btn-primary" @click="saveEdit()" :disabled="saving">
+          <span x-show="saving">Zapisuję…</span>
+          <span x-show="!saving">Zapisz</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {# ── Zlecenie transportowe ── #}
+  <div x-show="activeTab==='transport'" x-data="transportOrder()" x-init="load()" style="margin-bottom:24px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <h3 style="font-size:15px;font-weight:700;margin:0">Zlecenie transportowe</h3>
+      <template x-if="!transport">
+        <button class="btn btn-ghost" style="font-size:12px" @click="createOpen=true">
+          <i data-lucide="plus" style="width:13px;height:13px"></i> Utwórz / konsoliduj
+        </button>
+      </template>
+    </div>
+
+    <template x-if="transport">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:16px;font-weight:700" x-text="transport.numer"></span>
+          <span style="font-size:12px;color:var(--muted)">· <span x-text="transport.item_count"></span> zamówień</span>
+          <span class="dost-badge blue" x-text="transport.status"></span>
+        </div>
+        <div x-show="transport.uwagi" x-text="transport.uwagi"
+             style="font-size:13px;color:var(--muted);margin-top:6px"></div>
+      </div>
+    </template>
+
+    <template x-if="!transport">
+      <div style="background:var(--bg,#f8fafc);border:1px dashed var(--border);border-radius:10px;
+                  padding:14px 18px;font-size:13px;color:var(--muted)">
+        Brak przypisanego zlecenia transportowego.
+      </div>
+    </template>
+
+    <!-- Modal create -->
+    <div x-show="createOpen" class="modal-bg" @click.self="createOpen=false" style="display:none">
+      <div class="modal-box" style="max-width:420px">
+        <div class="modal-title">🚚 Zlecenie transportowe</div>
+        <div class="form-group">
+          <label>Tryb</label>
+          <select x-model="mode" class="form-control">
+            <option value="new">Nowe zlecenie dla tego zamówienia</option>
+            <option value="consolidate">Konsolidacja — dołącz do istniejącego</option>
+          </select>
+        </div>
+        <template x-if="mode==='consolidate'">
+          <div class="form-group">
+            <label>Numer zlecenia (ZT-YYYY-NNN)</label>
+            <input type="text" x-model="existingNr" placeholder="np. AT-2026-001"
+                   style="font-family:var(--mono)">
+          </div>
+        </template>
+        <div class="form-group">
+          <label>Uwagi (opcjonalnie)</label>
+          <textarea x-model="uwagi" rows="2" style="resize:vertical"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" @click="createOpen=false">Anuluj</button>
+          <button class="btn btn-primary" @click="submit()" :disabled="submitting">
+            <span x-show="!submitting">Utwórz / Dołącz</span>
+            <span x-show="submitting">Zapisuję…</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Pozycje zamówienia PO ── #}
+  <div x-show="activeTab==='przeglad'" style="margin-top:24px" x-data="poItemsPanel()" x-init="load()">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer"
+         @click="open=!open">
+      <span style="font-size:15px;font-weight:800;color:var(--text)">Pozycje zamówienia</span>
+      <span x-show="items.length" x-text="'(' + items.length + ')'"
+            style="font-size:12px;color:var(--muted)"></span>
+      <i :data-lucide="open ? 'chevron-up' : 'chevron-down'"
+         style="width:15px;height:15px;color:var(--muted)" x-init="$watch('open', ()=>{ if(window.lucide) lucide.createIcons(); })"></i>
+    </div>
+    <div x-show="open" x-transition>
+      <div x-show="loading" style="font-size:13px;color:var(--muted);padding:12px 0">Ładuję pozycje…</div>
+      <div x-show="!loading && !items.length" style="font-size:13px;color:var(--muted);padding:8px 0">
+        Brak pozycji — wgraj PO PDF, system odczyta automatycznie
+      </div>
+      <div x-show="!loading && items.length">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border)">
+              <th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase">Poz.</th>
+              <th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase">REF</th>
+              <th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase">Opis</th>
+              <th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase">Ilość</th>
+              <th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase">Cena</th>
+              <th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase">Wartość</th>
+              <th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase">Palety</th>
+              <th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase" title="Zajęte miejsca paletowe (palety zaokrąglone w górę)">Miejsca pal.</th>
+              <th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase">m³</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="it in items" :key="it.pozycja">
+              <tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:6px 8px;color:var(--muted);font-size:12px" x-text="it.pozycja"></td>
+                <td style="padding:6px 8px;font-family:var(--mono);font-weight:600" x-text="it.ref_code"></td>
+                <td style="padding:6px 8px;color:var(--muted);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="it.opis"></td>
+                <td style="padding:6px 8px;text-align:right" x-text="it.ilosc + ' ' + (it.jednostka||'')"></td>
+                <td style="padding:6px 8px;text-align:right;font-family:var(--mono)" x-text="it.cena_jednostkowa ? it.cena_jednostkowa.toFixed(4) + ' ' + (it.waluta||'EUR') : '—'"></td>
+                <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700" x-text="it.wartosc ? it.wartosc.toFixed(2) + ' ' + (it.waluta||'EUR') : '—'"></td>
+                <td style="padding:6px 8px;text-align:right;font-family:var(--mono)" x-text="(it.palety!=null) ? (it.palety.toLocaleString('pl-PL') + ' pal') : '—'"></td>
+                <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700" x-text="(it.miejsca_paletowe!=null) ? it.miejsca_paletowe : '—'"></td>
+                <td style="padding:6px 8px;text-align:right;font-family:var(--mono)" x-text="(it.m3!=null) ? (it.m3.toLocaleString('pl-PL') + ' m³') : '—'"></td>
+              </tr>
+            </template>
+          </tbody>
+          <tfoot x-show="items.length > 1">
+            <tr style="border-top:2px solid var(--border)">
+              <td colspan="5" style="padding:6px 8px;font-weight:700;text-align:right">Łącznie:</td>
+              <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:800"
+                  x-text="items.reduce((s,i)=>s+(i.wartosc||0), 0).toFixed(2) + ' ' + (items[0]?.waluta||'EUR')"></td>
+              <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:800"
+                  x-text="(totalPallets!=null) ? (totalPallets.toLocaleString('pl-PL') + ' pal') : '—'"></td>
+              <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:800"
+                  x-text="(totalPlaces!=null) ? totalPlaces : '—'"></td>
+              <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:800"
+                  x-text="(totalM3!=null) ? (totalM3.toLocaleString('pl-PL') + ' m³') : '—'"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {# Panel ręcznej weryfikacji proformy usunięty — weryfikacja PO/PI odbywa się
+     wyłącznie automatycznie przyciskiem „Weryfikuj PO/PI" (statusy sprawdzone_*). #}
+
+  {# ── Auto-podpowiedź dostawcy (po kodzie producenta z master daty) ── #}
+  <div x-show="activeTab==='przeglad'" style="margin-top:20px" x-data="supplierSuggest()" x-init="load()">
+    <template x-if="sug && (!curCode || curCode !== sug.code)">
+      <div style="background:var(--accent-bg,#eff6ff);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div style="font-size:13px">
+          <b>Sugerowany dostawca:</b>
+          <span style="font-weight:700" x-text="sug.name"></span>
+          <span style="font-family:var(--mono);color:var(--muted)" x-text="'(' + sug.code + ')'"></span>
+          <span style="color:var(--muted)"
+                x-text="[sug.country, sug.currency, sug.incoterms, sug.payment_terms_default, (sug.lead_time_days? ('lead '+sug.lead_time_days+'d'):'')].filter(Boolean).join(' · ')"></span>
+          <span x-show="multiple" style="color:#b45309" title="Pozycje wskazują różnych dostawców"> · ⚠ wielu kandydatów</span>
+        </div>
+        {% if role in ['manager','superuser','admin'] %}
+        <button class="btn btn-sm btn-primary" @click="assign()">Przypisz dostawcę</button>
+        {% endif %}
+        <span x-show="msg" x-text="msg" style="font-size:12px" :style="ok?'color:#16a34a':'color:var(--error)'"></span>
+      </div>
+    </template>
+  </div>
+
+  {# ── Mastery artworków (auto-dobór dla REF × poziom, najnowsza rewizja) ── #}
+  <div x-show="activeTab==='przeglad'" style="margin-top:24px" x-data="artMasters()" x-init="load()">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="font-size:15px;font-weight:800;color:var(--text)">Artworki master (auto)</div>
+      <span style="font-size:12px;color:var(--muted)" x-show="loaded" x-text="items.length + ' pozycji'"></span>
+      <button class="btn btn-sm btn-ghost" @click="load()">Odśwież</button>
+    </div>
+    <template x-if="loaded && items.length===0">
+      <div style="font-size:13px;color:var(--muted);font-style:italic">Brak pozycji PO z REF lub indeks artworków pusty.</div>
+    </template>
+    <template x-if="items.length">
+      <div style="overflow:auto;border:1px solid var(--border);border-radius:10px">
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <thead><tr style="background:var(--accent-bg,#eff6ff)">
+            <th style="padding:6px 10px;text-align:left">REF</th>
+            <th style="padding:6px 10px;text-align:left">Poziom</th>
+            <th style="padding:6px 10px;text-align:left">Master (najnowsza rewizja)</th>
+            <th style="padding:6px 10px;text-align:left">Status</th>
+            <th style="padding:6px 10px"></th>
+          </tr></thead>
+          <tbody>
+            <template x-for="(it,ix) in items" :key="ix">
+              <tr style="border-top:1px solid var(--border)">
+                <td style="padding:6px 10px;font-family:var(--mono);font-weight:700" x-text="it.ref"></td>
+                <td style="padding:6px 10px" x-text="it.level"></td>
+                <td style="padding:6px 10px;font-family:var(--mono)">
+                  <span x-show="it.found">
+                    <span x-text="it.filename"></span>
+                    <span style="color:var(--muted);font-size:11px;margin-left:6px"
+                          x-text="it.revision ? ('rew. ' + it.revision) : 'rew. ?'"
+                          :title="it.revision ? 'Rewizja z nazwy pliku' : 'Rewizji nie da się odczytać z nazwy pliku'"></span>
+                    <span x-show="it.source_mtime" style="color:#1d4ed8;font-size:11px;margin-left:6px"
+                          x-text="'📅 ' + (it.source_mtime||'').slice(0,10)" title="Data pliku z indeksu"></span>
+                    <span x-show="it.via_group" style="background:rgba(147,51,234,.10);color:#9333ea;border-radius:6px;padding:1px 7px;margin-left:6px;font-size:11px;font-family:var(--font)"
+                          :title="'Master odziedziczony z grupy mapowań: ' + it.group_name">z grupy: <span x-text="it.group_name"></span></span>
+                    <button class="btn btn-sm btn-ghost" x-show="it.preview_available" @click="preview(it.preview_url, it.filename)"
+                            style="margin-left:6px;font-size:11px;color:var(--accent)" title="Podgląd pliku master">👁 Podgląd</button>
+                    <span x-show="it.confirmed && !it.preview_available" style="color:var(--muted);font-size:11px;margin-left:6px"
+                          title="Plik zostanie dosłany przez agenta skanujący Z:\ przy najbliższym skanie">podgląd wkrótce…</span>
+                    {% if role in ['manager','superuser','admin'] %}
+                    <button class="btn btn-sm btn-primary" x-show="it.found && !it.preview_available && it.rel_path"
+                            @click="fromPath(it)" :disabled="uploadRel===it.rel_path"
+                            style="margin-left:6px;font-size:11px"
+                            title="Jednym kliknięciem pobierz plik ze wskazanej ścieżki PO STRONIE SERWERA (jeśli już dostępny w bibliotece/u agenta) — bez ręcznego wgrywania.">
+                      <span x-show="uploadRel!==it.rel_path">⬆ Wgraj ze ścieżki</span>
+                      <span x-show="uploadRel===it.rel_path">pobieranie…</span>
+                    </button>
+                    <button class="btn btn-sm btn-ghost" x-show="it.found && !it.preview_available"
+                            @click="triggerUpload(it)" :disabled="uploadRel===it.rel_path"
+                            style="margin-left:6px;font-size:11px;color:var(--accent)"
+                            title="Wgraj plik PDF mastera ręcznie (gdy serwer nie ma jeszcze pliku). Ścieżka zostanie skopiowana do schowka — wklej ją w oknie wyboru pliku.">
+                      <span x-show="uploadRel!==it.rel_path">⬆ Wgraj ręcznie</span>
+                      <span x-show="uploadRel===it.rel_path">wgrywanie…</span>
+                    </button>
+                    <button class="btn btn-sm btn-ghost" x-show="it.found && !it.preview_available && it.rel_path"
+                            @click="copyPath(it)" style="margin-left:4px;font-size:11px"
+                            title="Skopiuj pełną ścieżkę pliku do schowka (wklej w oknie wyboru pliku — bez szukania na Z:\)">📋 Ścieżka</button>
+                    {% endif %}
+                    {% if role in ['manager','superuser','admin'] %}
+                    <button class="btn btn-sm btn-ghost" x-show="(it.candidates||[]).length" @click="toggle(ix)"
+                            style="margin-left:6px;font-size:11px" title="Podmień plik mastera na inny">
+                      zmień ▾
+                    </button>
+                    <div x-show="it.found && it.rel_path"
+                         @click="copyPath(it)"
+                         style="font-size:10.5px;color:var(--muted);margin-top:3px;cursor:pointer;word-break:break-all"
+                         title="Kliknij, aby skopiować pełną ścieżkę do schowka">📁 <span x-text="winPath(it.rel_path)"></span></div>
+                    {% endif %}
+                  </span>
+                  <span x-show="!it.found && (it.candidates||[]).length" style="color:#b45309;font-style:italic">
+                    brak dokładnego dopasowania — wybierz plik:
+                  </span>
+                  {# Brak dopasowania i brak propozycji — pokaż KONKRETNY powód #}
+                  <template x-if="!it.found && !(it.candidates||[]).length">
+                    <span style="color:var(--error);font-style:italic">
+                      <div style="margin-bottom:4px;font-style:normal">
+                        <span style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:2px 8px;font-weight:700;font-size:11px">⚠️ Niezmapowany — do zmapowania</span>
+                        {% if role in ['manager','superuser','admin'] %}
+                        <button class="btn btn-sm btn-primary" @click="toMap(it)" :disabled="mapping===it.art_ref"
+                                style="font-size:11px;margin-left:6px"
+                                title="Utwórz wpis 'do zmapowania' w Profilach artworków dla tego REF">
+                          <span x-show="mapping!==it.art_ref">➕ Do mapowania</span>
+                          <span x-show="mapping===it.art_ref">dodaję…</span>
+                        </button>
+                        {% endif %}
+                        <a href="/artwork/mapping-groups" target="_blank" style="font-size:11px;margin-left:6px">grupa</a>
+                        <span style="color:var(--muted);font-size:11px">·</span>
+                        <a href="/artwork/aliases" target="_blank" style="font-size:11px">alias</a>
+                      </div>
+                      <template x-if="indexSize === 0">
+                        <span>⚠ Indeks artworków jest pusty — zasil go w <a href="/artwork/index" target="_blank">Indeks artworków</a> (import listy ścieżek z Z:\ albo skaner). Bez tego nie ma czego mapować.</span>
+                      </template>
+                      <template x-if="indexSize > 0 && !it.mat_found">
+                        <span>REF <b x-text="it.art_ref"></b> nie ma w master dacie materiałów — dodaj materiał albo powiązanie ręcznie (<a href="/artwork/aliases" target="_blank">Aliasy</a>).</span>
+                      </template>
+                      <template x-if="indexSize > 0 && it.mat_found && !it.has_desc">
+                        <span>Materiał bez opisu/TXT_SHORT_PL — uzupełnij opis w master dacie (po nim dopasowujemy nazwę pliku) albo dodaj alias ręcznie.</span>
+                      </template>
+                      <template x-if="indexSize > 0 && it.mat_found && it.has_desc">
+                        <span>brak dopasowania w indeksie (<span x-text="indexSize"></span> plików) dla REF <b x-text="it.art_ref"></b> — dodaj powiązanie ręcznie (<a href="/artwork/aliases" target="_blank">Aliasy</a>).</span>
+                      </template>
+                    </span>
+                  </template>
+
+                  {# Lista kandydatów: zawsze gdy nie znaleziono; przy „zmień" gdy znaleziono #}
+                  <template x-if="(it.candidates||[]).length && (!it.found || open[ix])">
+                    <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px">
+                      <template x-for="(c,ci) in it.candidates" :key="ci">
+                        <div style="display:flex;flex-direction:column;gap:2px;padding:4px 0;border-bottom:1px dashed var(--border)">
+                          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                            {% if role in ['manager','superuser','admin'] %}
+                            <button class="btn btn-sm btn-primary" @click="pick(it, c)" style="font-size:11px">Wybierz</button>
+                            {% endif %}
+                            <span style="color:#0f766e;font-weight:600" x-text="c.filename"></span>
+                            <span x-show="c.source_mtime" style="color:#1d4ed8;font-size:11px" x-text="'📅 ' + (c.source_mtime||'').slice(0,10)"></span>
+                            <span style="color:var(--muted);font-size:11px"
+                                  x-text="'(' + Math.round((c.score||0)*100) + '% · ' + (c.shared||0) + ' wsp.)'"></span>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--muted)">
+                            <span style="word-break:break-all;cursor:pointer" @click="copyPath(c)"
+                                  :title="'Kliknij, aby skopiować pełną ścieżkę'">📁 <span x-text="winPath(c.rel_path)"></span></span>
+                            <a :href="'/api/artwork/master-file/view?rel_path='+encodeURIComponent(c.rel_path)" target="_blank"
+                               @click.stop style="color:var(--accent);white-space:nowrap" title="Otwórz plik (jeśli jest w chmurze)">otwórz ↗</a>
+                          </div>
+                        </div>
+                      </template>
+                      <a href="/artwork/aliases" target="_blank" style="font-size:11px;color:var(--accent)">⚙ pełne zarządzanie powiązaniami…</a>
+                    </div>
+                  </template>
+                </td>
+                <td style="padding:6px 10px">
+                  <span x-show="it.revision_changed" style="color:#b45309;font-weight:700">⚠ nowa rewizja — potwierdź ponownie</span>
+                  <span x-show="!it.revision_changed && it.confirmed" style="color:#16a34a;font-weight:700">✓ potwierdzony</span>
+                  <span x-show="!it.revision_changed && !it.confirmed && it.found" style="color:var(--muted)">do potwierdzenia</span>
+                </td>
+                <td style="padding:6px 10px;text-align:right;white-space:nowrap">
+                  {% if role in ['manager','superuser','admin'] %}
+                  <button class="btn btn-sm btn-primary" x-show="it.found && (it.needs_confirmation || it.revision_changed)"
+                          @click="confirm(it)">Czy dobry? Potwierdź</button>
+                  <button class="btn btn-sm btn-ghost" x-show="it.confirmed"
+                          @click="unconfirm(it)" style="font-size:11px;color:#b91c1c"
+                          title="Cofnij potwierdzenie, żeby wybrać inny plik">Cofnij ↺</button>
+                  {% endif %}
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </template>
+    <div x-show="msg" x-text="msg" style="font-size:12px;margin-top:8px" :style="ok?'color:#16a34a':'color:var(--error)'"></div>
+
+    {# Ukryty input do ręcznego wgrania pliku mastera (podgląd od ręki) #}
+    <input type="file" x-ref="mfile" accept="application/pdf,image/*" style="display:none" @change="doUpload($event)">
+
+    {# Modal podglądu master artworku #}
+    <div x-show="previewUrl" x-cloak @click.self="closePreview()"
+         style="position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px">
+      <div style="background:#fff;border-radius:12px;width:min(1500px,98vw);height:96vh;display:flex;flex-direction:column;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border)">
+          <div style="font-weight:700;font-size:14px;font-family:var(--mono)" x-text="previewName"></div>
+          <div style="display:flex;gap:8px">
+            <a :href="previewUrl" target="_blank" class="btn btn-sm btn-ghost" style="font-size:12px">Otwórz w nowej karcie ↗</a>
+            <button class="btn btn-sm btn-ghost" @click="closePreview()" style="font-size:14px">✕</button>
+          </div>
+        </div>
+        <object :data="previewUrl" type="application/pdf" style="flex:1;width:100%;border:0">
+          <iframe :src="previewUrl" style="width:100%;height:100%;border:0"></iframe>
+        </object>
+      </div>
+    </div>
+  </div>
+
+  {# ── Transport: zlecenie + agent ── #}
+  {% if cur_status in ('zatwierdzone_do_wyplyniecia','zaokretowane','w_transporcie','na_miejscu') %}
+  <div x-show="activeTab==='transport'" style="margin-top:24px" x-data="transportPanel()">
+    <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:14px">Transport</div>
+
+    {# Zlecenie transportowe #}
+    {% if transport_order %}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">ZLECENIE TRANSPORTOWE</div>
+      <div style="font-size:14px;font-weight:800;font-family:var(--mono)">{{ transport_order.numer }}</div>
+      {% if transport_order.spedytor_name %}
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">
+        Spedytor: <strong>{{ transport_order.spedytor_name }}</strong>
+        {% if transport_order.forwarder_email %} · {{ transport_order.forwarder_email }}{% endif %}
+      </div>
+      {% endif %}
+      {% if transport_order.agent_name %}
+      <div style="margin-top:8px;padding:8px 10px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0">
+        <div style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;margin-bottom:3px">Agent</div>
+        <div style="font-size:13px;font-weight:700">{{ transport_order.agent_name }}</div>
+        {% if transport_order.agent_email %}
+        <div style="font-size:12px;color:var(--muted)">{{ transport_order.agent_email }}{% if transport_order.agent_phone %} · {{ transport_order.agent_phone }}{% endif %}</div>
+        {% endif %}
+      </div>
+      {% else %}
+      {% if role in ('manager','superuser','admin') %}
+      <div style="margin-top:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Przypisz agenta</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <input x-model="agentName" placeholder="Nazwa agenta *"
+                 style="padding:7px 10px;border-radius:6px;border:1px solid var(--border);font-size:13px">
+          <input x-model="agentEmail" placeholder="E-mail agenta"
+                 style="padding:7px 10px;border-radius:6px;border:1px solid var(--border);font-size:13px">
+        </div>
+        <input x-model="agentPhone" placeholder="Telefon agenta"
+               style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);font-size:13px;margin-bottom:8px">
+        <button class="btn btn-sm btn-primary" @click="setAgent({{ transport_order.id }})" :disabled="savingAgent">
+          Przypisz agenta
+        </button>
+        <span x-show="agentMsg" x-text="agentMsg" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
+      </div>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# Potwierdzenie wypłynięcia #}
+    {% if cur_status in ('zatwierdzone_do_wyplyniecia', 'w_transporcie') %}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px">POTWIERDZENIE WYPŁYNIĘCIA</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px">ETD (data wypłynięcia) *</label>
+          <input type="date" x-model="departureEtd"
+                 style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px">Numer plomby (seal)</label>
+          <input x-model="sealNumber" placeholder="np. XYZ123456"
+                 style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);font-size:13px">
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px">Numer kontenera</label>
+        <input x-model="kontenerNr" placeholder="np. MSCU1234567"
+               style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);font-size:13px;font-family:var(--mono)">
+      </div>
+      <button class="btn btn-sm btn-primary" @click="confirmDeparture()" :disabled="savingDep">
+        ✈️ Potwierdź wypłynięcie
+      </button>
+      <span x-show="depMsg" x-text="depMsg" style="font-size:12px;margin-left:8px"
+            :style="depOk ? 'color:#16a34a' : 'color:var(--error)'"></span>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ── Historia zmian ── #}
+  <div x-show="activeTab==='historia'" style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)">
+    <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;
+         letter-spacing:.5px;margin-bottom:12px">Historia zmian</div>
+    {% if not status_log %}
+    <div style="color:var(--muted);font-size:13px;padding:10px">Brak historii zmian.</div>
+    {% endif %}
+    {% for e in status_log %}
+    <div class="dd-log-item">
+      <div class="dd-log-dot"></div>
+      <div>
+        <div class="dd-log-text">
+          {% if e.pole == 'status' %}
+            {{ status_labels.get(e.stara_wartosc, e.stara_wartosc) or '—' }}
+            → {{ status_labels.get(e.nowa_wartosc, e.nowa_wartosc) }}
+          {% else %}
+            {{ e.pole }}: {{ e.stara_wartosc or '—' }} → {{ e.nowa_wartosc }}
+          {% endif %}
+        </div>
+        <div class="dd-log-meta">
+          {{ e.changed_by_name or '—' }} · {{ e.changed_at[:16].replace('T',' ') if e.changed_at else '' }}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>{# /x-data #}
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+// Slot data from server (serialized for Alpine)
+const _SLOTS = {{ doc_slots | tojson }};
+window._PO_NR = {{ item.nr_zamowienia | tojson }};
+
+function dostawaApp() {
+  return {
+    // Drawer
+    drawerOpen: false,
+    activeSlot: null,
+    currentSlot: {},
+    previewId: null,
+
+    // Zakładki szczegółów + osadzony raport HTML
+    activeTab: 'przeglad',
+    reportCid: null,
+    init() {
+      const p = new URLSearchParams(location.search);
+      const t = p.get('tab');
+      if (t && ['przeglad','raporty','transport','historia'].includes(t)) this.activeTab = t;
+      const c = p.get('cid');
+      if (c) { this.activeTab = 'raporty'; this.reportCid = parseInt(c) || null; }
+    },
+    setTab(t) {
+      this.activeTab = t;
+      const u = new URL(location.href);
+      u.searchParams.set('tab', t);
+      if (t !== 'raporty') u.searchParams.delete('cid');
+      history.replaceState(null, '', u);
+    },
+    openReport(cid) {
+      this.reportCid = cid; this.activeTab = 'raporty';
+      const u = new URL(location.href);
+      u.searchParams.set('tab', 'raporty'); u.searchParams.set('cid', cid);
+      history.replaceState(null, '', u);
+    },
+
+    // Weryfikacja PO/PI + Artwork
+    verifying: false,
+    verifyingArt: false,
+
+    // Upload
+    uploadOpen: false,
+    uploading: false,
+    uploadErr: '',
+    uploadForm: { doc_type: 'PO', file: null, filename: '' },
+
+    // Advance
+    advanceOpen: false,
+    advanceNote: '',
+    advancing: false,
+
+    // Ręczna zmiana statusu
+    forceOpen: false,
+    forceStatus: '{{ cur_status }}',
+    forceNote: '',
+    forcing: false,
+
+    // Edit
+    editOpen: false,
+    saving: false,
+    editForm: {
+      supplier_name:         {{ (item.supplier_name or '') | tojson }},
+      supplier_code:         {{ (item.supplier_code or '') | tojson }},
+      priorytet:             {{ (item.priorytet or 'normalny') | tojson }},
+      rodzaj_transportu:     {{ (item.rodzaj_transportu or '') | tojson }},
+      planowane_etd:         {{ (item.planowane_etd or '') | tojson }},
+      data_dostawy:          {{ (item.data_dostawy or '') | tojson }},
+      proforma_lot:          {{ (item.proforma_lot or '') | tojson }},
+      proforma_data_waznosci:{{ (item.proforma_data_waznosci or '') | tojson }},
+      uwagi:                 {{ (item.uwagi or '') | tojson }},
+    },
+
+    // Wyślij do dostawcy
+    sendOpen: false,
+    sendBusy: false,
+    sendMsg: '',
+    sendRecipient: {{ (supplier_email or '') | tojson }},
+    sendSupplierName: {{ (item.supplier_name or '') | tojson }},
+    sendSubject: 'Zamówienie {{ item.nr_zamowienia }} — ACME',
+    sendBody: 'Dzień dobry,\n\nPoniżej / w załączeniu przesyłamy zamówienie nr {{ item.nr_zamowienia }}.\nProsimy o potwierdzenie przyjęcia oraz proformy.\n\nPozdrawiamy,\nACME — Dział Zakupów',
+    openSend() {
+      if (!this.sendRecipient) {
+        toast('Brak e-maila dostawcy — uzupełnij w Master danych dostawców.', 'error', 6000);
+        return;
+      }
+      this.sendMsg = '';
+      this.sendOpen = true;
+    },
+    async doSend() {
+      this.sendBusy = true; this.sendMsg = '';
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/send-to-supplier', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject: this.sendSubject, body: this.sendBody }),
+        });
+        const d = await r.json();
+        if (!r.ok) { this.sendMsg = d.error || 'Błąd wysyłki'; this.sendBusy = false; return; }
+        toast('✅ Wysłano do dostawcy: ' + d.sent_to, 'ok', 6000);
+        this.sendOpen = false;
+        setTimeout(() => location.reload(), 900);
+      } catch (e) {
+        this.sendMsg = 'Błąd połączenia';
+      }
+      this.sendBusy = false;
+    },
+
+    openSlot(type) {
+      const slot = _SLOTS.find(s => s.type === type);
+      if (!slot) return;
+      this.currentSlot = slot;
+      this.activeSlot = type;
+      this.drawerOpen = true;
+      this.previewId = slot.files && slot.files.length > 0 ? slot.files[0].id : null;
+      this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+    },
+
+    closeDrawer() {
+      this.drawerOpen = false;
+      this.activeSlot = null;
+    },
+
+    fmtSize(bytes) {
+      if (!bytes) return '';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes/1024).toFixed(0) + ' KB';
+      return (bytes/1048576).toFixed(1) + ' MB';
+    },
+
+    triggerUpload(docType) {
+      const el = document.getElementById('upload-' + docType);
+      if (el) el.click();
+    },
+
+    async handleDrop(evt, docType) {
+      evt.currentTarget.classList.remove('drag');
+      const file = evt.dataTransfer.files[0];
+      if (!file) return;
+      await this._doUploadFile(file, docType);
+    },
+
+    async uploadFile(evt, docType) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      await this._doUploadFile(file, docType);
+    },
+
+    async doUpload() {
+      if (!this.uploadForm.file) { this.uploadErr = 'Wybierz plik'; return; }
+      this.uploadErr = '';
+      const ok = await this._doUploadFile(this.uploadForm.file, this.uploadForm.doc_type);
+      if (ok) this.uploadOpen = false;
+    },
+
+    async _doUploadFile(file, docType) {
+      this.uploading = true;
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('doc_type', docType);
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/documents', {
+          method: 'POST', body: fd,
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          this.uploadErr = d.error || 'Błąd uploadu';
+          toast(this.uploadErr, 'error');
+          return false;
+        }
+        toast('Plik wgrany: ' + file.name, 'ok');
+        if (d.auto_advanced) toast('Status → ' + (d.auto_label || d.auto_advanced), 'ok');
+        if (d.artwork_verifying) {
+          toast('Artwork fabryczny wgrany — automatyczne porównanie ze wzorcem w toku…', 'ok');
+          // Porównanie biegnie w tle — odpytuj status, aż pojawi się wynik artworku.
+          const DONE = ['artwork_zgodne','artwork_niezgodne','artwork_bledne'];
+          let tries = 0;
+          const poll = setInterval(async () => {
+            tries++;
+            try {
+              const sr = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/status');
+              const sd = await sr.json();
+              if (sr.ok && DONE.includes(sd.status)) {
+                clearInterval(poll);
+                toast('Porównanie zakończone → ' + (sd.label || sd.status), 'ok');
+                setTimeout(() => location.reload(), 600);
+              }
+            } catch (e) { /* przejściowy błąd sieci — próbuj dalej */ }
+            if (tries >= 60) { clearInterval(poll); location.reload(); }  // ~3 min limit
+          }, 3000);
+          return true;
+        }
+        if (d.po_pi_verifying) {
+          toast('PI wgrane — automatyczne porównanie PO↔PI w toku…', 'ok');
+          const DONE = ['sprawdzone_zgodne','sprawdzone_do_weryfikacji','sprawdzone_niezgodne'];
+          let tries = 0;
+          const poll = setInterval(async () => {
+            tries++;
+            try {
+              const sr = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/status');
+              const sd = await sr.json();
+              if (sr.ok && DONE.includes(sd.status)) {
+                clearInterval(poll);
+                toast('Porównanie PO↔PI zakończone → ' + (sd.label || sd.status), 'ok');
+                setTimeout(() => location.reload(), 600);
+              }
+            } catch (e) { /* przejściowy błąd sieci — próbuj dalej */ }
+            if (tries >= 60) { clearInterval(poll); location.reload(); }
+          }, 3000);
+          return true;
+        }
+        setTimeout(() => location.reload(), 900);
+        return true;
+      } catch (e) {
+        this.uploadErr = 'Błąd połączenia';
+        toast(this.uploadErr, 'error');
+        return false;
+      } finally {
+        this.uploading = false;
+      }
+    },
+
+    async deleteDoc(docId) {
+      if (!confirm('Usunąć ten plik?')) return;
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/documents/' + docId, {
+          method: 'DELETE',
+        });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || 'Błąd', 'error'); return; }
+        toast('Plik usunięty', 'ok');
+        setTimeout(() => location.reload(), 500);
+      } catch (e) {
+        toast('Błąd połączenia', 'error');
+      }
+    },
+
+    async doAdvance(confirmFlag = true) {
+      // Modal pokazuje już ostrzeżenie o brakach (miękka bramka), więc klik
+      // "Potwierdź" wysyła confirm:true. needs_confirm obsługiwany jako backstop.
+      this.advancing = true;
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/advance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note: this.advanceNote, confirm: confirmFlag }),
+        });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || 'Błąd', 'error'); return; }
+        if (d.needs_confirm) {
+          this.advancing = false;
+          if (confirm(d.message)) { return this.doAdvance(true); }
+          return;
+        }
+        toast('Status: ' + d.label, 'ok');
+        setTimeout(() => location.reload(), 700);
+      } catch (e) {
+        toast('Błąd połączenia', 'error');
+      } finally {
+        this.advancing = false;
+        this.advanceOpen = false;
+      }
+    },
+
+    async doRevert() {
+      if (!confirm('Cofnąć status o jeden etap wstecz{% if prev_label %} do: {{ prev_label }}{% endif %}?')) return;
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/revert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || 'Błąd', 'error'); return; }
+        toast('Cofnięto do: ' + d.label, 'ok');
+        setTimeout(() => location.reload(), 700);
+      } catch (e) {
+        toast('Błąd połączenia', 'error');
+      }
+    },
+
+    async doSetStatus(confirmFlag = false) {
+      if (this.forcing) return;
+      this.forcing = true;
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/set-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: this.forceStatus, note: this.forceNote, confirm: confirmFlag }),
+        });
+        const d = await r.json();
+        // Na błędzie (np. wymagana notatka) NIE zamykamy modala — użytkownik
+        // może dopisać uzasadnienie i spróbować ponownie.
+        if (!r.ok) { toast(d.error || 'Błąd', 'error'); return; }
+        if (d.needs_confirm) {
+          this.forcing = false;
+          if (confirm(d.message)) { return this.doSetStatus(true); }
+          return;
+        }
+        toast('Status: ' + d.label, 'ok');
+        this.forceOpen = false;
+        setTimeout(() => location.reload(), 700);
+      } catch (e) {
+        toast('Błąd połączenia', 'error');
+      } finally {
+        this.forcing = false;
+      }
+    },
+
+    async doVerifyPoPi(mode = 'check') {
+      if (this.verifying) return;
+      this.verifying = true;
+      if (mode !== 'check') toast('Porównuję PO ↔ PI…', 'info');
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/verify-po-pi', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode }),
+        });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || 'Błąd weryfikacji', 'error'); return; }
+        if (d.duplicate) {
+          this.verifying = false;
+          const msg = 'To zamówienie było już porównywane (' + d.count + ' raport(ów)).\n\n'
+            + 'OK = NADPISZ (usuń poprzednie i zrób nowe)\n'
+            + 'Anuluj = zrób KOLEJNY raport obok';
+          return this.doVerifyPoPi(confirm(msg) ? 'overwrite' : 'new');
+        }
+        const t = d.result_status === 'ok' ? 'ok'
+                : (['error','critical'].includes(d.result_status) ? 'error' : 'warn');
+        toast('Wynik: ' + d.label + ' (' + (d.diff_count || 0) + ' różnic)', t);
+        setTimeout(() => location.reload(), 1100);
+      } catch (e) {
+        toast('Błąd połączenia', 'error');
+      } finally {
+        this.verifying = false;
+      }
+    },
+
+    async deleteReport(cid) {
+      if (!confirm('Usunąć ten raport porównania z historii?')) return;
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/comparisons/' + cid, {
+          method: 'DELETE',
+        });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || 'Błąd', 'error'); return; }
+        toast('Raport usunięty', 'ok');
+        if (this.reportCid === cid) this.reportCid = null;
+        setTimeout(() => location.reload(), 400);
+      } catch (e) {
+        toast('Błąd połączenia', 'error');
+      }
+    },
+
+    async doVerifyArtwork() {
+      if (this.verifyingArt) return;
+      this.verifyingArt = true;
+      toast('Porównuję Artwork wzorzec ↔ fabryczny…', 'info');
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/verify-artwork', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || 'Błąd weryfikacji artworku', 'error'); return; }
+        const t = d.result_status === 'ok' ? 'ok'
+                : (['error','critical'].includes(d.result_status) ? 'error' : 'warn');
+        toast('Artwork: ' + d.label + ' (' + (d.diff_count || 0) + ' różnic)', t);
+        setTimeout(() => location.reload(), 1100);
+      } catch (e) {
+        toast('Błąd połączenia', 'error');
+      } finally {
+        this.verifyingArt = false;
+      }
+    },
+
+    async saveEdit() {
+      this.saving = true;
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.editForm),
+        });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || 'Błąd zapisu', 'error'); return; }
+        toast('Zapisano', 'ok');
+        setTimeout(() => location.reload(), 500);
+      } catch (e) {
+        toast('Błąd połączenia', 'error');
+      } finally {
+        this.saving = false;
+        this.editOpen = false;
+      }
+    },
+
+    async deleteDostawa() {
+      if (!confirm('Usunąć dostawę ' + {{ item.nr_zamowienia | tojson }} + '? Tej operacji nie można cofnąć!')) return;
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}', { method: 'DELETE' });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || 'Błąd', 'error'); return; }
+        toast('Dostawa usunięta', 'ok');
+        setTimeout(() => window.location.href = '/dostawy', 700);
+      } catch (e) { toast('Błąd połączenia', 'error'); }
+    },
+  };
+}
+
+function transportOrder() {
+  return {
+    transport: null,
+    createOpen: false,
+    mode: 'new',
+    existingNr: '',
+    uwagi: '',
+    submitting: false,
+
+    async load() {
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/transport-order');
+        const d = await r.json();
+        this.transport = d.transport_order;
+      } catch (e) {}
+    },
+
+    async submit() {
+      this.submitting = true;
+      try {
+        if (this.mode === 'new') {
+          const r = await fetch('/api/transport-orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ po_numbers: [{{ item.nr_zamowienia | tojson }}], uwagi: this.uwagi }),
+          });
+          const d = await r.json();
+          if (!r.ok) { toast(d.error || 'Błąd', 'error'); return; }
+          toast('Zlecenie ' + d.numer + ' utworzone', 'ok');
+          await this.load();
+          this.createOpen = false;
+        } else {
+          // Find transport order by number, then add item
+          const listR = await fetch('/api/transport-orders');
+          if (!listR.ok) { toast('Błąd ładowania zleceń', 'error'); return; }
+          const list = await listR.json();
+          const found = Array.isArray(list) ? list.find(t => t.numer === this.existingNr.trim()) : null;
+          if (!found) { toast('Nie znaleziono zlecenia ' + this.existingNr, 'error'); return; }
+          const r = await fetch('/api/transport-orders/' + found.id + '/items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ po_number: {{ item.nr_zamowienia | tojson }} }),
+          });
+          const d = await r.json();
+          if (!r.ok) { toast(d.error || 'Błąd', 'error'); return; }
+          toast('Dodano do zlecenia ' + this.existingNr, 'ok');
+          await this.load();
+          this.createOpen = false;
+        }
+      } catch (e) { toast('Błąd połączenia', 'error'); }
+      finally { this.submitting = false; }
+    },
+  };
+}
+
+function poItemsPanel() {
+  return {
+    open: true,
+    loading: false,
+    items: [],
+    totalPallets: null,
+    totalPlaces: null,
+    totalM3: null,
+    async load() {
+      this.loading = true;
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/line-items');
+        const d = await r.json();
+        this.items = d.items || [];
+        this.totalPallets = (d.total_pallets != null) ? d.total_pallets : null;
+        this.totalPlaces = (d.total_places != null) ? d.total_places : null;
+        this.totalM3 = (d.total_m3 != null) ? d.total_m3 : null;
+      } catch(_) {}
+      finally { this.loading = false; }
+    },
+  };
+}
+
+function supplierSuggest() {
+  return {
+    sug: null, multiple: false, curCode: {{ (item.supplier_code or '')|tojson }}, msg: '', ok: false,
+    async load() {
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/suggest-supplier');
+        const d = await r.json();
+        this.sug = d.suggested || null; this.multiple = !!d.multiple;
+      } catch (e) {}
+    },
+    async assign() {
+      if (!this.sug) return;
+      this.msg = '';
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ supplier_name: this.sug.name, supplier_code: this.sug.code }),
+        });
+        const d = await r.json();
+        if (!r.ok) { this.msg = d.error || 'Błąd'; this.ok = false; return; }
+        this.msg = 'Przypisano: ' + this.sug.name; this.ok = true;
+        setTimeout(() => location.reload(), 700);
+      } catch (e) { this.msg = 'Błąd połączenia'; this.ok = false; }
+    },
+  };
+}
+
+function artMasters() {
+  return {
+    items: [], loaded: false, msg: '', ok: false, open: {}, indexSize: null,
+    previewUrl: '', previewName: '', uploadRel: '', mapping: '',
+    toggle(ix) { this.open = { ...this.open, [ix]: !this.open[ix] }; },
+    preview(url, name) { this.previewUrl = url || ''; this.previewName = name || ''; },
+    closePreview() { this.previewUrl = ''; },
+    // Ręczne wgranie pliku mastera — żeby podgląd działał od razu, bez czekania
+    // na agenta skanujący Z:\. Plik zapisujemy pod rel_path bieżącego mastera.
+    // Ścieżka pliku z indeksu w formacie Windows (do wklejenia w oknie wyboru pliku).
+    winPath(rel) { return String(rel || '').replace(/\//g, '\\'); },
+    async copyPath(it, silent) {
+      const p = this.winPath(it.rel_path);
+      if (!p) return;
+      try {
+        await navigator.clipboard.writeText(p);
+        this.msg = silent
+          ? ('Ścieżka skopiowana do schowka — w oknie wyboru pliku wklej ją (Ctrl+V) w pole nazwy i naciśnij Enter:  ' + p)
+          : ('Skopiowano ścieżkę:  ' + p);
+        this.ok = true;
+      } catch (e) {
+        this.msg = 'Ścieżka pliku (skopiuj ręcznie):  ' + p; this.ok = true;
+      }
+    },
+    triggerUpload(it) {
+      if (!it.rel_path) { this.msg = 'Brak ścieżki pliku — najpierw dopasuj/potwierdź master.'; this.ok = false; return; }
+      this._pendRel = it.rel_path; this._pendName = it.filename || '';
+      // Skopiuj pełną ścieżkę do schowka — w oknie wyboru pliku wystarczy wkleić
+      // (Ctrl+V) i Enter, bez przeszukiwania całego dysku Z:\.
+      this.copyPath(it, true);
+      this.$refs.mfile.value = '';
+      this.$refs.mfile.click();
+    },
+    // Jednym kliknięciem: serwer pobiera plik ze ścieżki (biblioteka/agent) — bez uploadu.
+    // Gdy serwer nie ma jeszcze pliku (Z:\ niedostępny) → automatycznie otwórz ręczny
+    // wybór pliku ze skopiowaną ścieżką, żeby klik nie był „martwy".
+    async fromPath(it) {
+      if (!it.rel_path) { this.msg = 'Brak ścieżki pliku.'; this.ok = false; return; }
+      this.uploadRel = it.rel_path; this.msg = '';
+      try {
+        const r = await fetch('/api/artwork/master-files/from-path', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rel_path: it.rel_path, filename: it.filename || '' }),
+        });
+        const d = await r.json();
+        if (r.ok) { this.msg = 'Pobrano podgląd ze ścieżki: ' + (it.filename || ''); this.ok = true; this.load(); }
+        else if (r.status === 409) {
+          // Plik nie jest na serwerze — przejdź od razu na ręczny wybór (ścieżka w schowku).
+          this.uploadRel = '';
+          this.msg = 'Pliku nie ma jeszcze na serwerze — wybierz go ręcznie (ścieżkę skopiowano do schowka).';
+          this.ok = true;
+          this.triggerUpload(it);
+          return;
+        } else { this.msg = d.error || 'Nie udało się pobrać pliku.'; this.ok = false; }
+      } catch (e) { this.msg = 'Błąd połączenia'; this.ok = false; }
+      finally { if (this.uploadRel === it.rel_path) this.uploadRel = ''; }
+    },
+    // Niezmapowany REF → wpis 'do zmapowania' w Profilach artworków.
+    async toMap(it) {
+      this.mapping = it.art_ref; this.msg = '';
+      try {
+        const r = await fetch('/api/artwork/profiles/to-map', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: it.art_ref, ean: it.ean || '' }),
+        });
+        const d = await r.json();
+        if (!r.ok) { this.msg = d.error || 'Nie udało się dodać do mapowania.'; this.ok = false; }
+        else { this.msg = (d.existed ? 'Już jest w Profilach: ' : 'Dodano do mapowania (Profile artworków): ') + it.art_ref; this.ok = true; }
+      } catch (e) { this.msg = 'Błąd połączenia'; this.ok = false; }
+      finally { this.mapping = ''; }
+    },
+    async doUpload(ev) {
+      const f = ev.target.files && ev.target.files[0];
+      const rel = this._pendRel;
+      if (!f || !rel) return;
+      this.uploadRel = rel; this.msg = '';
+      try {
+        const fd = new FormData();
+        fd.append('rel_path', rel);
+        fd.append('file', f, f.name);
+        const r = await fetch('/api/artwork/master-files/upload', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (!r.ok) { this.msg = d.error || 'Błąd wgrywania pliku'; this.ok = false; return; }
+        this.msg = 'Wgrano podgląd: ' + (this._pendName || f.name); this.ok = true;
+        this.load();
+      } catch (e) { this.msg = 'Błąd połączenia'; this.ok = false; }
+      finally { this.uploadRel = ''; this._pendRel = ''; this._pendName = ''; }
+    },
+    async load() {
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/artwork-masters');
+        const d = await r.json();
+        this.items = d.items || []; this.indexSize = d.index_size; this.loaded = true;
+      } catch (e) { this.loaded = true; }
+    },
+    async confirm(it) {
+      this.msg = '';
+      try {
+        const r = await fetch('/api/artwork/confirm', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: it.art_ref, rel_path: it.rel_path, level: it.level_key || '' }),
+        });
+        const d = await r.json();
+        if (!r.ok) { this.msg = d.error || 'Błąd'; this.ok = false; return; }
+        this.msg = 'Potwierdzono: ' + it.ref + ' / ' + it.level; this.ok = true;
+        this.load();
+      } catch (e) { this.msg = 'Błąd połączenia'; this.ok = false; }
+    },
+    async unconfirm(it) {
+      this.msg = '';
+      try {
+        const r = await fetch('/api/artwork/unconfirm', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: it.art_ref, level: it.level_key || '' }),
+        });
+        const d = await r.json();
+        if (!r.ok) { this.msg = d.error || 'Błąd'; this.ok = false; return; }
+        this.msg = 'Cofnięto potwierdzenie: ' + it.ref + ' / ' + it.level;
+        this.ok = true; this.open = {}; this.load();
+      } catch (e) { this.msg = 'Błąd połączenia'; this.ok = false; }
+    },
+    async pick(it, c) {
+      // Zapamiętaj wybór w DWÓCH krokach (klucz = art_ref, tak jak lookup):
+      //  1) alias (replace) — żeby dobór trafiał bezpośrednio i przy nowych rewizjach,
+      //  2) potwierdzenie pliku (artwork_confirmed) — żeby działało wykrywanie nowszej
+      //     rewizji („pojawiła się nowsza — potwierdź ponownie").
+      this.msg = '';
+      const key = it.art_ref || it.ref;
+      const stem = (c.filename || '').replace(/\.[^.]+$/, '');
+      if (!stem) { this.msg = 'Brak nazwy pliku'; this.ok = false; return; }
+      try {
+        // Alias (po REF) zakładamy tylko gdy pozycja NIE ma poziomu — alias jest
+        // per-REF, więc dla konkretnego poziomu (OP/KAR) pominęlibyśmy go, żeby
+        // pouch nie nadpisał kartonu. Per-poziom wystarczy samo potwierdzenie.
+        if (!it.level_key) {
+          let ar = await fetch('/api/artwork/alias', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ref_code: key, pattern: stem, replace: true }),
+          });
+          let ad = await ar.json();
+          if (!ar.ok) { this.msg = ad.error || 'Błąd powiązania'; this.ok = false; return; }
+        }
+        // potwierdź wybrany plik jako master tej rewizji (per REF + poziom)
+        let r = await fetch('/api/artwork/confirm', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: key, rel_path: c.rel_path, level: it.level_key || '' }),
+        });
+        let d = await r.json();
+        if (!r.ok) {
+          this.msg = 'Powiązano, ale nie udało się potwierdzić: ' + (d.error || '');
+          this.ok = false; this.open = {}; this.load(); return;
+        }
+        this.msg = 'Wybrano i potwierdzono ' + it.ref + ' → ' + c.filename;
+        this.ok = true;
+        this.open = {};
+        this.load();
+      } catch (e) { this.msg = 'Błąd połączenia'; this.ok = false; }
+    },
+  };
+}
+
+function transportPanel() {
+  return {
+    agentName: '',
+    agentEmail: '',
+    agentPhone: '',
+    savingAgent: false,
+    agentMsg: '',
+    departureEtd: '',
+    sealNumber: '',
+    kontenerNr: {{ (item.numer_kontenera or '') | tojson }},
+    savingDep: false,
+    depMsg: '',
+    depOk: false,
+    async setAgent(tid) {
+      if (!this.agentName.trim()) { this.agentMsg = 'Podaj nazwę agenta'; return; }
+      this.savingAgent = true; this.agentMsg = '';
+      try {
+        const r = await fetch('/api/transport-orders/' + tid + '/agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agent_name: this.agentName, agent_email: this.agentEmail, agent_phone: this.agentPhone }),
+        });
+        const d = await r.json();
+        if (!r.ok) { this.agentMsg = d.error || 'Błąd'; return; }
+        this.agentMsg = '✅ Agent przypisany';
+        setTimeout(() => location.reload(), 700);
+      } catch(_) { this.agentMsg = 'Błąd połączenia'; }
+      finally { this.savingAgent = false; }
+    },
+    async confirmDeparture() {
+      if (!this.departureEtd) { this.depMsg = 'Podaj datę ETD'; this.depOk = false; return; }
+      this.savingDep = true; this.depMsg = '';
+      try {
+        const r = await fetch('/api/dostawy/{{ item.nr_zamowienia }}/confirm-departure', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ etd_real: this.departureEtd, seal_number: this.sealNumber, numer_kontenera: this.kontenerNr }),
+        });
+        const d = await r.json();
+        if (!r.ok) { this.depMsg = d.error || 'Błąd'; this.depOk = false; return; }
+        this.depMsg = '✅ Wypłynięcie potwierdzone';
+        this.depOk = true;
+        setTimeout(() => location.reload(), 900);
+      } catch(_) { this.depMsg = 'Błąd połączenia'; this.depOk = false; }
+      finally { this.savingDep = false; }
+    },
+  };
+}
+</script>
+
+<!-- ── Viewer dokumentów: podgląd w wysokiej jakości + zoom scrollem (PDF.js, lazy) ── -->
+<script>
+(function () {
+  if (window.openDocViewer) return;
+  var PDF_JS_SRC = "{{ url_for('static', filename='js/vendor/pdf.min.js') }}";
+  var PDF_WORKER_SRC = "{{ url_for('static', filename='js/vendor/pdf.worker.min.js') }}";
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  var IMG_EXT = ['png','jpg','jpeg','gif','bmp','webp'];
+  var pdfLoad = null, el = {}, rerenderTimer = null;
+  var state = { pdf: null, mode: null, zoom: 1, fit: 1, rendered: 1, imgW: 0, url: '' };
+
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    if (pdfLoad) return pdfLoad;
+    pdfLoad = new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = PDF_JS_SRC;
+      s.onload = function () {
+        try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_SRC; } catch (e) {}
+        res(window.pdfjsLib);
+      };
+      s.onerror = function () { rej(new Error('pdfjs load failed')); };
+      document.head.appendChild(s);
+    });
+    return pdfLoad;
+  }
+
+  function build() {
+    if (el.overlay) return;
+    var o = document.createElement('div');
+    o.className = 'dv-overlay'; o.hidden = true;
+    o.innerHTML =
+      '<div class="dv-toolbar">' +
+        '<span class="dv-title"></span><span class="dv-spacer"></span>' +
+        '<button class="dv-btn" data-act="out" title="Pomniejsz">−</button>' +
+        '<span class="dv-zoom-label">100%</span>' +
+        '<button class="dv-btn" data-act="in" title="Powiększ">+</button>' +
+        '<button class="dv-btn" data-act="fit" title="Dopasuj do szerokości">Dopasuj</button>' +
+        '<a class="dv-btn" data-act="tab" target="_blank" title="Otwórz w nowej karcie">↗</a>' +
+        '<button class="dv-btn" data-act="close" title="Zamknij (Esc)">✕</button>' +
+      '</div>' +
+      '<div class="dv-stage"><div class="dv-content"></div></div>';
+    document.body.appendChild(o);
+    el.overlay = o;
+    el.title = o.querySelector('.dv-title');
+    el.zoomLabel = o.querySelector('.dv-zoom-label');
+    el.tab = o.querySelector('[data-act=tab]');
+    el.stage = o.querySelector('.dv-stage');
+    el.content = o.querySelector('.dv-content');
+
+    o.addEventListener('click', function (ev) {
+      var a = ev.target.closest('[data-act]');
+      if (!a) { if (ev.target === el.stage) close(); return; }
+      var act = a.getAttribute('data-act');
+      if (act === 'close') close();
+      else if (act === 'in') setZoom(state.zoom * 1.25);
+      else if (act === 'out') setZoom(state.zoom / 1.25);
+      else if (act === 'fit') setZoom(state.fit);
+    });
+    // Zoom scrollem (mysz/touchpad) — bez przewijania strony
+    el.stage.addEventListener('wheel', function (ev) {
+      ev.preventDefault();
+      setZoom(state.zoom * (ev.deltaY < 0 ? 1.12 : 0.893));
+    }, { passive: false });
+    document.addEventListener('keydown', function (ev) {
+      if (!el.overlay || el.overlay.hidden) return;
+      if (ev.key === 'Escape') close();
+      else if (ev.key === '+' || ev.key === '=') { ev.preventDefault(); setZoom(state.zoom * 1.25); }
+      else if (ev.key === '-') { ev.preventDefault(); setZoom(state.zoom / 1.25); }
+    });
+  }
+
+  function close() {
+    if (!el.overlay) return;
+    el.overlay.hidden = true;
+    document.body.style.overflow = '';
+    el.content.innerHTML = '';
+    el.content.style.transform = '';
+    try { if (state.pdf) state.pdf.destroy(); } catch (e) {}
+    state.pdf = null; state.mode = null;
+  }
+
+  function setZoom(z) {
+    z = Math.max(0.15, Math.min(8, z));
+    state.zoom = z;
+    el.zoomLabel.textContent = Math.round(z * 100) + '%';
+    if (state.mode === 'pdf') {
+      // Natychmiastowy feedback przez CSS, potem ostre przerenderowanie.
+      el.content.style.transformOrigin = 'top center';
+      el.content.style.transform = 'scale(' + (z / state.rendered) + ')';
+      clearTimeout(rerenderTimer);
+      rerenderTimer = setTimeout(function () { renderPdf(z); }, 140);
+    } else if (state.mode === 'img' && el.img) {
+      el.img.style.width = (state.imgW * z) + 'px';
+    }
+  }
+
+  function renderPdf(scale) {
+    if (!state.pdf) return;
+    var pdf = state.pdf, n = pdf.numPages, done = 0;
+    var frag = document.createElement('div');
+    frag.style.display = 'inline-flex'; frag.style.flexDirection = 'column';
+    frag.style.alignItems = 'center'; frag.style.gap = '14px';
+    for (var i = 1; i <= n; i++) {
+      (function (pageNum) {
+        pdf.getPage(pageNum).then(function (page) {
+          var vp = page.getViewport({ scale: scale * DPR });
+          var canvas = document.createElement('canvas');
+          canvas.width = vp.width; canvas.height = vp.height;
+          canvas.style.width = (vp.width / DPR) + 'px';
+          canvas.style.height = (vp.height / DPR) + 'px';
+          canvas.dataset.page = pageNum;
+          page.render({ canvasContext: canvas.getContext('2d'), viewport: vp });
+          frag.appendChild(canvas);
+          if (++done === n) {
+            // ułóż wg numeru strony (render async)
+            var arr = Array.prototype.slice.call(frag.children);
+            arr.sort(function (a, b) { return (+a.dataset.page) - (+b.dataset.page); });
+            arr.forEach(function (c) { frag.appendChild(c); });
+            el.content.style.transform = '';
+            el.content.innerHTML = '';
+            el.content.appendChild(frag);
+            state.rendered = scale;
+          }
+        });
+      })(i);
+    }
+  }
+
+  function showError(url) {
+    el.content.style.transform = '';
+    el.content.innerHTML = '<div class="dv-error">Nie udało się wyświetlić podglądu.<br>' +
+      '<a href="' + url + '" target="_blank">↗ Otwórz w nowej karcie</a></div>';
+  }
+
+  window.openDocViewer = function (url, name) {
+    build();
+    state = { pdf: null, mode: null, zoom: 1, fit: 1, rendered: 1, imgW: 0, url: url };
+    el.title.textContent = name || 'Dokument';
+    el.tab.href = url;
+    el.zoomLabel.textContent = '100%';
+    el.content.style.transform = '';
+    el.content.innerHTML = '<div class="dv-loading">Ładowanie…</div>';
+    el.overlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+    el.stage.scrollTop = 0;
+
+    var clean = (name || url).split('?')[0].toLowerCase();
+    var ext = clean.indexOf('.') >= 0 ? clean.split('.').pop() : '';
+
+    if (IMG_EXT.indexOf(ext) >= 0) {
+      state.mode = 'img';
+      var img = new Image();
+      img.onload = function () {
+        var fit = Math.min(1, (el.stage.clientWidth - 60) / img.naturalWidth) || 1;
+        state.imgW = img.naturalWidth; state.fit = fit; state.zoom = fit;
+        img.style.width = (img.naturalWidth * fit) + 'px';
+        el.content.innerHTML = ''; el.content.appendChild(img);
+        el.img = img; el.zoomLabel.textContent = Math.round(fit * 100) + '%';
+      };
+      img.onerror = function () { showError(url); };
+      img.src = url;
+      return;
+    }
+
+    // PDF (i nieznane → próbujemy jako PDF; przy błędzie fallback)
+    state.mode = 'pdf';
+    loadPdfJs().then(function (pdfjsLib) {
+      return pdfjsLib.getDocument({ url: url, withCredentials: true }).promise;
+    }).then(function (pdf) {
+      state.pdf = pdf;
+      return pdf.getPage(1).then(function (page) {
+        var natural = page.getViewport({ scale: 1 });
+        var fit = (el.stage.clientWidth - 60) / natural.width;
+        fit = Math.max(0.3, Math.min(3, fit));
+        state.fit = fit; state.zoom = fit; state.rendered = fit;
+        el.zoomLabel.textContent = Math.round(fit * 100) + '%';
+        renderPdf(fit);
+      });
+    }).catch(function () { showError(url); });
+  };
+})();
+</script>
+{% endblock %}

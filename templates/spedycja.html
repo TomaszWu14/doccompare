@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <meta name="description" content="Portal zewnętrzny dla spedytorów — zlecenia celne ACME">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Portal Spedycji — DocCompare</title>
+  <style>
+    :root{
+      --bg:#0f172a; --surface:#1e293b; --surface2:#273449; --border:#334155;
+      --text:#e2e8f0; --muted:#94a3b8; --accent:#5b9bff;
+      --ok:#3ddba0; --warn:#fbbf24; --err:#f87171;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 22px;background:var(--surface);border-bottom:1px solid var(--border)}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+    .brand .ic{font-size:20px}
+    .who{font-size:13px;color:var(--muted)}
+    .who b{color:var(--text)}
+    .btn{cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text);
+         padding:7px 14px;border-radius:8px;font-size:13px;text-decoration:none;display:inline-block}
+    .btn:hover{background:var(--border)}
+    .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+    .wrap{max-width:1200px;margin:0 auto;padding:24px 22px}
+    h1{font-size:22px;margin:0 0 4px}
+    .sub{color:var(--muted);font-size:14px;margin-bottom:22px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{padding:11px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:middle}
+    th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:var(--surface2)}
+    tr:last-child td{border-bottom:none}
+    .cont{font-family:ui-monospace,monospace;font-weight:700}
+    select,input[type=text]{background:var(--bg);border:1px solid var(--border);color:var(--text);
+         padding:7px 9px;border-radius:7px;font-size:13px;width:100%}
+    .status-oczekuje{color:var(--muted)}
+    .status-w_odprawie{color:var(--warn)}
+    .status-zatwierdzone,.status-wydane{color:var(--ok)}
+    .status-odrzucone{color:var(--err)}
+    .empty{padding:48px;text-align:center;color:var(--muted)}
+    .toast{position:fixed;bottom:22px;right:22px;padding:12px 18px;border-radius:9px;font-size:14px;
+           background:var(--surface2);border:1px solid var(--border);opacity:0;transform:translateY(10px);
+           transition:.2s;pointer-events:none}
+    .toast.show{opacity:1;transform:translateY(0)}
+    .toast.ok{border-color:var(--ok)} .toast.err{border-color:var(--err)}
+    .muted{color:var(--muted)}
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="ic" aria-hidden="true">🚛</span> Portal Spedycji</div>
+    <nav style="display:flex;align-items:center;gap:14px" aria-label="Konto użytkownika">
+      <span class="who">{{ forwarder_name or '—' }} · <b>{{ username }}</b></span>
+      <a href="/logout" class="btn">Wyloguj</a>
+    </nav>
+  </header>
+
+  <div class="wrap">
+    <h1>Zlecenia spedycyjne</h1>
+    <div class="sub">Przypisz agenta celnego i aktualizuj status odprawy. Zmiany trafiają do działu Transportu i Zakupów.</div>
+
+    {% if admin_preview %}
+    <div class="sub" style="margin-top:10px;padding:10px 14px;border:1px solid #f59e0b;border-radius:8px;background:rgba(245,158,11,.10);color:#b45309">
+      🛠️ <b>Tryb podglądu administratora</b> — widzisz wszystkie zlecenia wszystkich firm spedycyjnych (tylko odczyt). Edycja statusu/agenta jest możliwa wyłącznie z konta spedytora powiązanego z daną firmą.
+    </div>
+    {% endif %}
+
+    <div class="card">
+      {% if orders %}
+      <table>
+        <thead>
+          <tr>
+            {% if admin_preview %}<th scope="col" style="width:200px">Firma spedycyjna</th>{% endif %}
+            <th scope="col">Kontener</th><th scope="col">PO</th><th scope="col">Trasa</th><th scope="col">ETA</th>
+            <th scope="col" style="width:180px">Status odprawy</th>
+            <th scope="col" style="width:220px">Agent celny</th>
+            {% if not admin_preview %}<th scope="col" style="width:90px"></th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+          <tr id="row-{{ o.id }}">
+            {% if admin_preview %}<td class="muted">{{ o.forwarder_company or '—' }}</td>{% endif %}
+            <td class="cont">{{ o.container_number }}</td>
+            <td>{{ o.po_numbers or '—' }}</td>
+            <td class="muted">{{ o.origin_port or '?' }} → {{ o.dest_port or '?' }}</td>
+            <td class="muted">{{ o.eta or '—' }}</td>
+            {% if admin_preview %}
+            <td>{{ (o.customs_status or '').replace('_',' ') or '—' }}</td>
+            <td>{{ o.customs_agent or '—' }}</td>
+            {% else %}
+            <td>
+              <select id="status-{{ o.id }}">
+                {% for s in statuses %}
+                <option value="{{ s }}" {% if o.customs_status==s %}selected{% endif %}>{{ s.replace('_',' ') }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td><input type="text" id="agent-{{ o.id }}" value="{{ o.customs_agent or '' }}" placeholder="np. Agencja Celna XYZ"></td>
+            <td><button type="button" class="btn btn-primary" onclick="saveOrder({{ o.id }})">Zapisz</button></td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">
+        {% if admin_preview %}
+          Brak zleceń transportowych w systemie. Pojawią się tu po utworzeniu zleceń w module Transport.
+        {% elif not forwarder_name %}
+          Twoje konto nie jest powiązane z firmą spedycyjną. Skontaktuj się z administratorem.
+        {% else %}
+          Brak zleceń spedycyjnych. Pojawią się tu po wysłaniu z działu Transportu.
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    function getCsrf(){ return document.querySelector('meta[name="csrf-token"]')?.content || ''; }
+    function toast(msg, kind){
+      var t=document.getElementById('toast');
+      t.textContent=msg; t.className='toast show '+(kind||'');
+      setTimeout(function(){ t.className='toast'; }, 2600);
+    }
+    function saveOrder(id){
+      var status=document.getElementById('status-'+id).value;
+      var agent=document.getElementById('agent-'+id).value.trim();
+      fetch('/api/spedycja/queue/'+id, {
+        method:'POST',
+        headers:{'Content-Type':'application/json', 'X-CSRF-Token': getCsrf()},
+        body:JSON.stringify({customs_status:status, customs_agent:agent})
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d.ok){ toast('Zapisano zlecenie '+id, 'ok'); }
+        else { toast(d.error||'Błąd zapisu', 'err'); }
+      })
+      .catch(function(e){ toast('Błąd: '+e, 'err'); });
+    }
+  </script>
+</body>
+</html>

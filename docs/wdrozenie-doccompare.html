@@ -1,0 +1,159 @@
+<title>DocCompare — wdrożenie na serwerze wewnętrznym</title>
+<style>
+  :root{
+    --ground:#F6F7F5; --panel:#FFFFFF; --ink:#1B2420; --ink-soft:#55635C;
+    --rule:#D8DED8; --accent:#12665C; --accent-soft:#E4EFEB;
+    --warn:#8A5A12; --warn-soft:#F6EEDF;
+    --serif:Cambria,"Hoefler Text",Georgia,"Times New Roman",serif;
+    --sans:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+    --mono:ui-monospace,"Cascadia Mono",Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--ground:#141916;--panel:#1C2320;--ink:#E7EDE9;--ink-soft:#9FB0A8;
+      --rule:#2E3833;--accent:#5FBFA8;--accent-soft:#1E2C29;
+      --warn:#D6A455;--warn-soft:#2A2418;}
+  }
+  :root[data-theme="dark"]{--ground:#141916;--panel:#1C2320;--ink:#E7EDE9;--ink-soft:#9FB0A8;
+    --rule:#2E3833;--accent:#5FBFA8;--accent-soft:#1E2C29;--warn:#D6A455;--warn-soft:#2A2418;}
+  :root[data-theme="light"]{--ground:#F6F7F5;--panel:#FFFFFF;--ink:#1B2420;--ink-soft:#55635C;
+    --rule:#D8DED8;--accent:#12665C;--accent-soft:#E4EFEB;--warn:#8A5A12;--warn-soft:#F6EEDF;}
+
+  body{background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;margin:0;padding:clamp(1.5rem,4vw,3.5rem) 1.25rem;}
+  main{max-width:60rem;margin:0 auto;display:flex;flex-direction:column;gap:2.5rem;}
+
+  header{display:flex;flex-direction:column;gap:.5rem;
+    border-bottom:2px solid var(--accent);padding-bottom:1.25rem;}
+  .eyebrow{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);font-weight:600;}
+  h1{font-family:var(--serif);font-size:clamp(1.8rem,4vw,2.6rem);line-height:1.15;
+    margin:0;text-wrap:balance;font-weight:600;}
+  .lede{color:var(--ink-soft);max-width:62ch;margin:0;}
+
+  section{display:flex;flex-direction:column;gap:1rem;}
+  h2{font-family:var(--serif);font-size:1.4rem;margin:0;font-weight:600;text-wrap:balance;}
+  h2 .num{color:var(--accent);font-family:var(--mono);font-size:.85em;margin-right:.5rem;}
+  p{margin:0;max-width:68ch;}
+
+  .scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:4px;background:var(--panel);}
+  table{border-collapse:collapse;width:100%;min-width:40rem;font-size:.92rem;}
+  th,td{text-align:left;padding:.7rem .9rem;border-bottom:1px solid var(--rule);
+    vertical-align:top;}
+  thead th{background:var(--accent-soft);color:var(--accent);font-size:.75rem;
+    letter-spacing:.08em;text-transform:uppercase;}
+  tbody tr:last-child td{border-bottom:none;}
+  td strong{font-weight:600;}
+  .rec{font-family:var(--mono);font-size:.78rem;color:var(--accent);white-space:nowrap;}
+
+  .panel{background:var(--panel);border:1px solid var(--rule);border-radius:4px;
+    padding:1.25rem 1.4rem;display:flex;flex-direction:column;gap:.75rem;}
+  .panel.flag{background:var(--warn-soft);border-color:var(--warn);}
+  .panel.flag h3{color:var(--warn);}
+  h3{font-size:1rem;margin:0;font-weight:650;}
+
+  ol.asks{margin:0;padding-left:0;list-style:none;counter-reset:q;
+    display:flex;flex-direction:column;gap:1rem;}
+  ol.asks li{counter-increment:q;display:grid;grid-template-columns:2rem 1fr;gap:.9rem;}
+  ol.asks li::before{content:counter(q);font-family:var(--mono);font-weight:600;
+    color:var(--accent);background:var(--accent-soft);border-radius:3px;
+    height:1.7rem;display:grid;place-items:center;font-size:.85rem;}
+  ol.asks .why{color:var(--ink-soft);font-size:.9rem;display:block;margin-top:.15rem;}
+
+  code{font-family:var(--mono);font-size:.88em;background:var(--accent-soft);
+    color:var(--accent);padding:.1em .35em;border-radius:3px;}
+  footer{color:var(--ink-soft);font-size:.85rem;border-top:1px solid var(--rule);
+    padding-top:1rem;}
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">DocCompare · dokumenty celne</span>
+    <h1>Gdzie postawić aplikację</h1>
+    <p class="lede">Porównanie trzech wariantów hostingu i lista pytań do działu IT.
+      Aplikacja to jeden proces w Pythonie — bez zewnętrznych usług, bez dostępu do internetu poza
+      opcjonalnym OCR.</p>
+  </header>
+
+  <section>
+    <h2><span class="num">A</span>Trzy warianty</h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Wariant</th><th>Za</th><th>Przeciw</th><th>Werdykt</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Serwer wewnętrzny</strong><br>PLZ-ZZ-APP4</td>
+            <td>Dane zostają w firmie. Zero kosztu. IT już utrzymuje maszynę i robi kopie.
+              Dostęp dla całego działu.</td>
+            <td>Wymaga czasu IT na wdrożenie i ustalenia, kto wgrywa nowe wersje.</td>
+            <td class="rec">wybór</td>
+          </tr>
+          <tr>
+            <td><strong>Maszyna w Azure</strong></td>
+            <td>Niezależna od sprzętu w biurze, gotowe kopie zapasowe i skalowanie.</td>
+            <td>Około 130 zł miesięcznie, brak subskrypcji w tenancie, dane wychodzą poza firmę.</td>
+            <td>rezerwa</td>
+          </tr>
+          <tr>
+            <td><strong>Komputer autora</strong><br>stan obecny</td>
+            <td>Działa od zaraz, zero formalności — dobre do testów jednoosobowych.</td>
+            <td>Znika przy wylogowaniu i restarcie. Brak kopii zapasowych. Zapora nie wpuszcza
+              innych użytkowników.</td>
+            <td>tylko testy</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">B</span>Dwa sposoby instalacji</h2>
+    <p>Oba prowadzą do tego samego działającego programu. Różnią się tym, ile pracy zajmuje
+      pierwsze uruchomienie i późniejsza aktualizacja.</p>
+    <div class="panel">
+      <h3>Z Dockerem — jeśli serwer go ma</h3>
+      <p>Repozytorium zawiera gotowy przepis (<code>Dockerfile</code>). Aplikacja przyjeżdża
+        spakowana razem ze wszystkim, czego potrzebuje: Pythonem, bibliotekami i narzędziami
+        do odczytu plików PDF. Na serwerze nic się nie instaluje — obraz się po prostu uruchamia.
+        Aktualizacja to podmiana obrazu i restart; powrót do poprzedniej wersji zajmuje sekundy.</p>
+    </div>
+    <div class="panel">
+      <h3>Bez Dockera — instalacja klasyczna</h3>
+      <p>Na Linuksie: Python ze środowiskiem wirtualnym, biblioteki z pliku
+        <code>requirements-prod.txt</code>, trzy pakiety systemowe
+        (<code>tesseract-ocr</code>, <code>poppler-utils</code>, <code>ghostscript</code>)
+        i usługa systemd. Na Windowsie analogicznie, z usługą systemową zamiast systemd.
+        Działa tak samo — więcej ręcznych kroków przy pierwszym uruchomieniu i przy każdej
+        aktualizacji.</p>
+    </div>
+    <div class="panel flag">
+      <h3>Uwaga z dzisiejszych testów</h3>
+      <p>Firmowe proxy podmienia certyfikaty, przez co instalator bibliotek Pythona odmawia
+        pobierania. Przy instalacji klasycznej trzeba wskazać mu firmowy certyfikat
+        (<code>pip config set global.cert …</code>). Docker omija ten problem, bo paczka
+        powstaje poza serwerem.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">C</span>Pytania do IT</h2>
+    <ol class="asks">
+      <li><div><strong>Linux czy Windows, i czy jest Docker?</strong>
+        <span class="why">Decyduje o sposobie wdrożenia — przygotujemy instrukcję pod konkretny wariant.</span></div></li>
+      <li><div><strong>Kto wgrywa nowe wersje?</strong>
+        <span class="why">Jeśli każda poprawka wymaga zgłoszenia, iteracje trwają tygodnie zamiast godzin. Warto ustalić z góry.</span></div></li>
+      <li><div><strong>Czy kopie zapasowe obejmują dane aplikacji, czy tylko system?</strong>
+        <span class="why">Najczęściej pomijane pytanie. Baza dokumentów celnych bez kopii to pojedynczy punkt awarii.</span></div></li>
+      <li><div><strong>Czy aplikacja dostanie adres HTTPS?</strong>
+        <span class="why">Bez tego hasła i dokumenty idą przez sieć otwartym tekstem.</span></div></li>
+      <li><div><strong>Osobna maszyna wirtualna per aplikacja — czy tak to u nas wygląda?</strong>
+        <span class="why">Jeśli tak: rozsądne i standardowe. Osobny serwer fizyczny per aplikacja byłby przesadą.</span></div></li>
+    </ol>
+  </section>
+
+  <footer>
+    Przed udostępnieniem aplikacji użytkownikom: zmienić hasła kont zakładanych automatycznie
+    przy pustej bazie i włączyć HTTPS.
+  </footer>
+</main>

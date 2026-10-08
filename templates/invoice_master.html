@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block page_title %}Baza materiałowa{% endblock %}
+{% block content %}
+<div class="max-w-4xl">
+  <h1 class="text-lg font-semibold mb-4">Baza materiałowa</h1>
+  <form method="get" class="mb-3">
+    <input type="text" name="q" value="{{ q }}" placeholder="szukaj po REF / opisie"
+           class="border rounded px-2 py-1 w-64">
+    <button type="submit" class="px-3 py-1.5 bg-indigo-600 text-white rounded">Szukaj</button>
+  </form>
+  <table class="w-full text-sm border-collapse">
+    <thead>
+      <tr class="text-left border-b">
+        <th class="py-1">REF</th><th>Nazwa PL</th><th>CN</th><th>SENT</th><th>J.m. bazowa</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr class="border-b">
+        <td class="py-1">{{ r.ref_code }}</td>
+        <td>{{ r.opis_pl }}</td>
+        <td>{{ r.tariff_cn or "—" }}</td>
+        <td>{{ "TAK" if r.sent else "NIE" }}</td>
+        <td>{{ r.base_uom or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

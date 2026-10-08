@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raport {{ comp.doc_type }} — {{ nr }}</title>
+<style>
+  :root{
+    --ok:#16a34a; --warn:#d97706; --err:#dc2626; --ink:#1f2937; --muted:#6b7280;
+    --line:#e5e7eb; --bg:#f8fafc; --surface:#fff; --accent:#1d4ed8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;color:var(--ink);background:var(--bg);font-size:13px;line-height:1.5}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  .rhead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;
+         background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+  .rhead h1{font-size:17px;margin:0 0 4px}
+  .rhead .sub{font-size:12px;color:var(--muted)}
+  .badge{display:inline-block;padding:5px 14px;border-radius:6px;font-weight:700;font-size:13px;color:#fff}
+  .b-ok{background:var(--ok)} .b-warn{background:var(--warn)} .b-err{background:var(--err)}
+  .stat-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .stat{flex:1;min-width:120px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+  .stat .n{font-size:20px;font-weight:800}
+  .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .sec{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);
+       margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--line)}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);font-size:12px;vertical-align:top}
+  th{background:#f1f5f9;font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#475569}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr.r-diff{background:#fff5f5} tr.r-fmt{background:#eff6ff}
+  .st{font-weight:800;text-align:center;width:34px}
+  .st.ok{color:var(--ok)} .st.diff{color:var(--err)} .st.fmt{color:var(--accent)}
+  .warn-box{background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:6px;font-size:12.5px}
+  .warn-box li{margin:2px 0}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{display:inline-block;padding:8px 14px;border-radius:7px;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+  .btn-pdf{background:#b91c1c;color:#fff;border-color:#b91c1c}
+  .btn-back{background:var(--surface)}
+  .muted{color:var(--muted)}
+  .empty{padding:20px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+{% set risk = result.risk_level or comp.status or 'ok' %}
+{% set rmap = {'ok':('b-ok','ZGODNE'),'sprawdzone_zgodne':('b-ok','ZGODNE'),
+               'ostrzezenie':('b-warn','DO WERYFIKACJI'),
+               'blad':('b-err','NIEZGODNE'),'error':('b-err','NIEZGODNE'),'critical':('b-err','NIEZGODNE')} %}
+{% set rcls, rlbl = rmap.get(risk, ('b-warn', risk|upper)) %}
+{% set tbl = (result.modules or {}).get('table', {}) %}
+{% set items = tbl.get('items', []) %}
+{% set headers = tbl.get('headers', []) %}
+<div class="wrap">
+
+  <div class="rhead">
+    <div>
+      <h1>Raport porównania — {{ comp.doc_type|replace('_',' ') }}</h1>
+      <div class="sub">
+        Dostawa <b>{{ nr }}</b> ·
+        A: {{ result.doc_type_a or 'PO' }} ({{ comp.file_a }}) ·
+        B: {{ result.doc_type_b or 'PI' }} ({{ comp.file_b }}) ·
+        {{ (comp.created_at|string)[:16] }}
+      </div>
+    </div>
+    <div style="text-align:right;display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+      <span class="badge {{ rcls }}">{{ rlbl }}</span>
+      <div class="toolbar">
+        <a class="btn btn-pdf" href="/api/export/pdf/{{ cid }}" target="_blank">⬇ Pobierz PDF</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat"><div class="n" style="color:var(--err)">{{ comp.diff_count or 0 }}</div><div class="l">Różnice</div></div>
+    <div class="stat"><div class="n">{{ items|length }}</div><div class="l">Pozycje</div></div>
+    <div class="stat"><div class="n num">{{ tbl.get('total_a') or '—' }}</div><div class="l">Wartość {{ result.doc_type_a or 'PO' }}</div></div>
+    <div class="stat"><div class="n num">{{ tbl.get('total_b') or '—' }}</div><div class="l">Wartość {{ result.doc_type_b or 'PI' }}</div></div>
+  </div>
+
+  {% if result.warnings %}
+  <div class="sec">Uwagi i ostrzeżenia ({{ result.warnings|length }})</div>
+  <div class="warn-box">
+    <ul style="margin:0;padding-left:18px">
+      {% for w in result.warnings %}<li>{{ w }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if headers %}
+  <div class="sec">Nagłówki dokumentu</div>
+  <table>
+    <thead><tr><th class="st">ST</th><th>Pole</th><th>{{ result.doc_type_a or 'PO' }}</th><th>{{ result.doc_type_b or 'PI' }}</th><th>Uwaga</th></tr></thead>
+    <tbody>
+      {% for h in headers %}
+      {% set hs = h.get('status','') %}
+      {% set diff = hs in ('roznica','brak_w_a','brak_w_b') %}
+      <tr class="{{ 'r-diff' if diff else ('r-fmt' if hs=='format' else '') }}">
+        <td class="st {{ 'diff' if diff else ('fmt' if hs=='format' else 'ok') }}">{{ '!' if diff else ('~' if hs=='format' else '✓') }}</td>
+        <td><b>{{ h.get('key','') }}</b></td>
+        <td>{{ h.get('val_a') or '—' }}</td>
+        <td>{{ h.get('val_b') or '—' }}</td>
+        <td class="muted">{{ h.get('comment','') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <div class="sec">Pozycje towarowe ({{ items|length }})</div>
+  {% if items %}
+  <table>
+    <thead><tr>
+      <th class="st">ST</th><th>REF</th><th>Opis</th>
+      <th class="num">Ilość A</th><th class="num">Ilość B</th>
+      <th class="num">NET A</th><th class="num">NET B</th><th class="num">Δ</th>
+    </tr></thead>
+    <tbody>
+      {% for it in items %}
+      {% set s = it.get('status','') %}
+      {% set diff = s in ('roznica','brak_w_a','brak_w_b') %}
+      {% set na = it.get('net_a') %}{% set nb = it.get('net_b') %}
+      <tr class="{{ 'r-diff' if diff else ('r-fmt' if s=='format' else '') }}">
+        <td class="st {{ 'diff' if diff else ('fmt' if s=='format' else 'ok') }}">{{ '!' if diff else ('~' if s=='format' else '✓') }}</td>
+        <td><b>{{ it.get('ref') or '—' }}</b></td>
+        <td>{{ it.get('desc_b') or it.get('desc_a') or '' }}</td>
+        <td class="num">{{ it.get('qty_a') or '—' }}</td>
+        <td class="num">{{ it.get('qty_b') or '—' }}</td>
+        <td class="num">{{ na or '—' }}</td>
+        <td class="num">{{ nb or '—' }}</td>
+        <td class="num">
+          {%- set d = none -%}
+          {%- if na is not none and nb is not none -%}
+            {%- set d = (nb|string|replace(',','.')|float) - (na|string|replace(',','.')|float) -%}
+          {%- endif -%}
+          {%- if d is not none -%}{{ '%+.2f'|format(d) }}{%- else -%}—{%- endif -%}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Brak pozycji towarowych w porównaniu.</div>
+  {% endif %}
+
+  <div style="margin-top:20px;font-size:11px;color:var(--muted)">
+    Raport wygenerowany automatycznie przez DocCompare. PDF: <a href="/api/export/pdf/{{ cid }}">pobierz</a>.
+  </div>
+</div>
+</body>
+</html>

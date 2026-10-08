@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+{% block title %}Analiza literówek — DocCompare{% endblock %}
+{% block extra_head %}
+<style>
+  h2{font-size:20px;font-weight:500;margin-bottom:5px}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:20px}
+  .badge-typo{display:inline-flex;align-items:center;gap:6px;font-size:11px;
+    font-family:var(--mono);color:var(--warn);background:rgba(255,179,71,.1);
+    border:1px solid rgba(255,179,71,.2);border-radius:20px;padding:3px 10px;margin-bottom:18px}
+
+  /* UPLOAD */
+  .upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+  .drop{background:var(--surface);border:2px dashed var(--border);border-radius:12px;
+    padding:32px 20px;text-align:center;cursor:pointer;transition:border-color .2s;position:relative}
+  .drop:hover,.drop.over{border-color:var(--accent);background:rgba(91,155,255,.04)}
+  .drop.has{border-color:var(--ok);border-style:solid}
+  .drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .drop-icon{font-size:24px;margin-bottom:8px}
+  .drop-label{font-size:13px;font-weight:500;margin-bottom:3px}
+  .drop-sub{font-size:12px;color:var(--muted)}
+  .drop-name{font-family:var(--mono);font-size:12px;color:var(--ok);margin-top:7px;word-break:break-all}
+  .btn-run{background:var(--accent);color:#fff;border:none;border-radius:8px;
+    padding:10px 26px;font-size:14px;font-weight:500;cursor:pointer;transition:opacity .2s;
+    display:block;margin-bottom:20px}
+  .btn-run:hover{opacity:.85}
+  .btn-run:disabled{opacity:.35;cursor:not-allowed}
+
+  /* ERROR/LOADER */
+  .err-box{display:none;background:rgba(255,92,92,.08);border:1px solid rgba(255,92,92,.25);
+    border-radius:9px;padding:14px 18px;color:var(--error);font-size:14px;margin-bottom:18px}
+  .err-box.on{display:block}
+  .loader{display:none;text-align:center;padding:40px;color:var(--muted);font-size:14px}
+  .loader.on{display:block}
+  .spin{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);
+    border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* RESULTS */
+  .results{display:none}
+  .results.on{display:block}
+
+  /* SUMMARY HEADER */
+  .res-header{display:grid;grid-template-columns:auto 1fr repeat(3,72px);
+    align-items:center;gap:14px;padding:16px 20px;background:var(--surface);
+    border:1px solid var(--border);border-radius:10px;margin-bottom:20px}
+  .risk-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+  .dot-ok{background:var(--ok);box-shadow:0 0 8px rgba(61,219,160,.5)}
+  .dot-warn{background:var(--warn);box-shadow:0 0 8px rgba(255,179,71,.5)}
+  .dot-err{background:var(--error);box-shadow:0 0 8px rgba(255,92,92,.5)}
+  .res-sum{font-size:13px;line-height:1.5}
+  .res-meta{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:3px}
+  .stat-box{text-align:center}
+  .stat-num{font-family:var(--mono);font-size:20px;font-weight:500;line-height:1}
+  .stat-lbl{font-size:10px;color:var(--muted);margin-top:3px}
+  .s-err{color:var(--error)}.s-warn{color:var(--warn)}.s-info{color:#8b9cf8}
+
+  /* FILTER */
+  .bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .bar span{font-size:11px;color:var(--muted);font-family:var(--mono)}
+  .fbtn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:20px;
+    padding:4px 12px;font-size:12px;cursor:pointer;font-family:var(--mono);transition:all .15s}
+  .fbtn:hover{border-color:var(--muted);color:var(--text)}
+  .fbtn.a-all.active{background:#444;border-color:#666;color:#fff}
+  .fbtn.a-err.active{background:rgba(255,92,92,.2);border-color:var(--error);color:var(--error)}
+  .fbtn.a-warn.active{background:rgba(255,179,71,.2);border-color:var(--warn);color:var(--warn)}
+  .fbtn.a-i1.active{background:rgba(255,92,92,.3);border-color:#ff4444;color:#ff4444}
+  .fbtn.a-info.active{background:rgba(123,158,247,.2);border-color:#8b9cf8;color:#8b9cf8}
+
+  /* FINDINGS TABLE */
+  .sec-title{font-size:11px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--muted);margin:20px 0 10px;font-family:var(--mono)}
+  .tbl-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:8px 10px;font-size:10px;font-family:var(--mono);letter-spacing:1px;
+    color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface);white-space:nowrap}
+  td{padding:8px 10px;border-bottom:1px solid rgba(42,45,58,.4);vertical-align:top}
+  tr:hover td{background:rgba(255,255,255,.018)}
+
+  /* ROW COLORS BY SEVERITY */
+  .sev-error td:first-child{border-left:3px solid var(--error)}
+  .sev-warning td:first-child{border-left:3px solid var(--warn)}
+  .sev-info td:first-child{border-left:3px solid #8b9cf8}
+
+  /* CATEGORY BADGES */
+  .cat-badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;
+    font-family:var(--mono);white-space:nowrap}
+  .cat-I_vs_1{background:rgba(255,92,92,.2);color:var(--error);font-weight:500}
+  .cat-literowka{background:rgba(255,179,71,.15);color:var(--warn)}
+  .cat-brak_dokumentu{background:rgba(255,92,92,.15);color:var(--error)}
+  .cat-ilosc{background:rgba(255,92,92,.15);color:var(--error)}
+  .cat-wartosc{background:rgba(255,92,92,.15);color:var(--error)}
+  .cat-format{background:rgba(123,158,247,.12);color:#8b9cf8}
+  .cat-warunki{background:rgba(255,179,71,.12);color:var(--warn)}
+
+  /* VALUE DISPLAY */
+  .val-block{font-family:var(--mono);font-size:12px}
+  .val-a{color:var(--error)}
+  .val-b{color:var(--ok)}
+  .val-arrow{color:var(--muted);margin:0 4px}
+  .suggestion{font-size:11px;color:var(--muted);margin-top:3px;font-style:italic}
+
+  /* SEVERITY PILL */
+  .sev-pill{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;
+    font-family:var(--mono);white-space:nowrap}
+  .p-err{background:rgba(255,92,92,.12);color:var(--error)}
+  .p-warn{background:rgba(255,179,71,.12);color:var(--warn)}
+  .p-info{background:rgba(123,158,247,.12);color:#8b9cf8}
+
+  tr.hidden-row{display:none}
+
+  /* HIGHLIGHT I vs 1 */
+  .hl-i1{background:rgba(255,92,92,.2);padding:1px 3px;border-radius:3px;
+    font-family:var(--mono);font-weight:500;color:var(--error)}
+</style>
+{% endblock %}
+
+{% block page_title %}Sprawdzanie literówek{% endblock %}
+
+{% block content %}
+{% include '_compare_modes.html' %}
+<div class="page-header">
+  <h1>Analiza literówek i rozbieżności</h1>
+  <p class="sub">Wykrywa literówki, zamiany I↔1/O↔0, brakujące numery dokumentów, różnice ilości i warunków.</p>
+</div>
+<div class="badge-typo">🔍 Detektor niuansów — I vs 1, brakujące ref, podwójne litery</div>
+
+<div id="tplBar" style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+  <label style="font-size:12px;color:var(--muted);font-family:var(--mono);white-space:nowrap">SZABLON:</label>
+  <select id="tplSel" onchange="applyTemplate(this.value)"
+    style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px;outline:none;min-width:200px">
+    <option value="">— wybierz szablon —</option>
+  </select>
+  <span id="tplApplied" style="display:none;font-size:11px;color:var(--ok);font-family:var(--mono)">✓ Szablon zastosowany</span>
+</div>
+
+<div class="upload-grid">
+  <div class="drop" id="za"><input type="file" id="fa" accept=".pdf">
+    <div class="drop-icon">📄</div><div class="drop-label">Dokument A</div>
+    <div class="drop-sub">SAD, PO, Faktura…</div><div class="drop-name" id="na"></div>
+  </div>
+  <div class="drop" id="zb"><input type="file" id="fb" accept=".pdf">
+    <div class="drop-icon">📄</div><div class="drop-label">Dokument B</div>
+    <div class="drop-sub">CI, PI, Packing List…</div><div class="drop-name" id="nb"></div>
+  </div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
+  <button type="button" class="btn-run" id="btnRun" onclick="run()" style="margin-bottom:0">Analizuj literówki →</button>
+  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--muted);user-select:none">
+    <input type="checkbox" id="useAI" checked style="width:15px;height:15px;accent-color:var(--accent)">
+    <span>🤖 Walidacja AI <span style="font-size:11px;font-family:var(--mono)">(+5-10s)</span></span>
+  </label>
+</div>
+
+<div class="err-box" id="errBox"></div>
+<div class="loader" id="ldr"><div class="spin"></div>Skanowanie dokumentów…</div>
+
+<div class="results" id="res" aria-live="polite" aria-atomic="false">
+
+  <!-- AI REPORT -->
+  <div id="aiReport" style="display:none;background:linear-gradient(135deg,rgba(91,155,255,.08),rgba(164,123,251,.06));
+    border:1px solid rgba(91,155,255,.25);border-radius:10px;padding:18px 20px;margin-bottom:18px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:16px" aria-hidden="true">🤖</span>
+      <strong style="font-size:13px">Raport AI</strong>
+      <span id="aiRisk" style="font-size:11px;padding:2px 8px;border-radius:20px;font-family:var(--mono);margin-left:4px"></span>
+    </div>
+    <div id="aiSummary" style="font-size:13px;line-height:1.65;color:var(--text)"></div>
+    <div id="aiCritical" style="margin-top:10px;display:none">
+      <div style="font-size:11px;font-family:var(--mono);color:var(--error);margin-bottom:5px">DO NATYCHMIASTOWEGO DZIAŁANIA:</div>
+      <div id="aiCriticalList" style="font-size:12px;line-height:1.7"></div>
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="res-header">
+    <div class="risk-dot" id="riskDot"></div>
+    <div class="res-sum">
+      <div id="resSummary"></div>
+      <div class="res-meta" id="resMeta"></div>
+    </div>
+    <div class="stat-box"><div class="stat-num s-err" id="sErr">0</div><div class="stat-lbl">błędy</div></div>
+    <div class="stat-box"><div class="stat-num s-warn" id="sWarn">0</div><div class="stat-lbl">ostrzeżenia</div></div>
+    <div class="stat-box"><div class="stat-num s-info" id="sInfo">0</div><div class="stat-lbl">uwagi</div></div>
+  </div>
+
+  <!-- FILTER -->
+  <div class="bar">
+    <span>FILTR:</span>
+    <button type="button" class="fbtn a-all active" onclick="setF('all',this)">Wszystkie</button>
+    <button type="button" class="fbtn a-err" onclick="setF('error',this)">Błędy krytyczne</button>
+    <button type="button" class="fbtn a-i1" onclick="setF('I_vs_1',this)">⚠ I↔1 / O↔0</button>
+    <button type="button" class="fbtn a-warn" onclick="setF('warning',this)">Literówki</button>
+    <button type="button" class="fbtn a-info" onclick="setF('info',this)">Format/uwagi</button>
+  </div>
+
+  <!-- FINDINGS TABLE -->
+  <div class="sec-title">Wyniki analizy</div>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr>
+      <th scope="col" style="width:9%">Ważność</th>
+      <th scope="col" style="width:13%">Kategoria</th>
+      <th scope="col" style="width:18%">Pole</th>
+      <th scope="col" style="width:55%">Opis i wartości</th>
+      <th scope="col" style="width:5%">Akcja</th>
+    </tr></thead>
+    <tbody id="fBody"></tbody>
+  </table>
+  </div>
+
+</div><!-- /results -->
+
+<script>
+function setupDrop(zid,fid,nid){
+  const z=document.getElementById(zid),f=document.getElementById(fid),n=document.getElementById(nid);
+  f.addEventListener('change',()=>{if(f.files[0]){n.textContent='✓ '+f.files[0].name;z.classList.add('has')}});
+  z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('over')});
+  z.addEventListener('dragleave',()=>z.classList.remove('over'));
+  z.addEventListener('drop',e=>{
+    e.preventDefault();z.classList.remove('over');
+    const file=e.dataTransfer.files[0];
+    if(file&&file.name.toLowerCase().endsWith('.pdf')){
+      const dt=new DataTransfer();dt.items.add(file);
+      f.files=dt.files;n.textContent='✓ '+file.name;z.classList.add('has');
+    }
+  });
+}
+setupDrop('za','fa','na');
+setupDrop('zb','fb','nb');
+
+async function run(){
+  const fa=document.getElementById('fa').files[0];
+  const fb=document.getElementById('fb').files[0];
+  const useAI=document.getElementById('useAI').checked;
+  if(!fa||!fb){showErr('Wybierz dwa pliki PDF.');return}
+  document.getElementById('errBox').classList.remove('on');
+  document.getElementById('res').classList.remove('on');
+  document.getElementById('aiReport').style.display='none';
+  document.getElementById('ldr').classList.add('on');
+  document.getElementById('btnRun').disabled=true;
+  const fd=new FormData();
+  fd.append('file_a',fa);fd.append('file_b',fb);
+  if(useAI) fd.append('use_ai','1');
+  try{
+    const r=await fetch('/api/typo_compare',{method:'POST',body:fd});
+    const d=await r.json();
+    if(!r.ok||d.error){showErr(d.error||'Błąd');return}
+    render(d,fa.name,fb.name);
+    if(d.ai_validation&&!d.ai_validation.error) renderAI(d.ai_validation);
+  }catch(e){showErr('Błąd: '+e.message)}
+  finally{document.getElementById('ldr').classList.remove('on');document.getElementById('btnRun').disabled=false}
+}
+
+function renderAI(ai){
+  const box=document.getElementById('aiReport');
+  box.style.display='block';
+  const riskMap={ok:['OK','rgba(61,219,160,.2)','var(--ok)'],warning:['Ostrzeżenie','rgba(255,179,71,.2)','var(--warn)'],error:['Błąd','rgba(255,92,92,.2)','var(--error)']};
+  const risk=ai.overall_risk||'ok';
+  const [rl,rbg,rc]=riskMap[risk]||riskMap.ok;
+  const riskEl=document.getElementById('aiRisk');
+  riskEl.textContent=rl;riskEl.style.background=rbg;riskEl.style.color=rc;
+  document.getElementById('aiSummary').textContent=ai.report_pl||ai.overall_summary||'';
+  const critList=ai.critical_errors||ai.critical_items||[];
+  if(critList.length>0){
+    document.getElementById('aiCritical').style.display='block';
+    document.getElementById('aiCriticalList').innerHTML=
+      critList.map(c=>`<div style="color:var(--error);padding:2px 0">❌ ${esc(c)}</div>`).join('');
+  }
+}
+
+function showErr(m){
+  document.getElementById('errBox').textContent='✕ '+m;
+  document.getElementById('errBox').classList.add('on');
+  document.getElementById('ldr').classList.remove('on');
+  document.getElementById('btnRun').disabled=false;
+}
+
+function render(d,na,nb){
+  const ec=d.error_count||0, wc=d.warning_count||0, ic=d.info_count||0;
+  const dot=document.getElementById('riskDot');
+  dot.className='risk-dot '+(ec>0?'dot-err':wc>0?'dot-warn':'dot-ok');
+  document.getElementById('resSummary').textContent=d.summary||'';
+  document.getElementById('resMeta').textContent=`A: ${na} · B: ${nb} · #${d.comparison_id||'?'}`;
+  document.getElementById('sErr').textContent=ec;
+  document.getElementById('sWarn').textContent=wc;
+  document.getElementById('sInfo').textContent=ic;
+
+  const fb=document.getElementById('fBody');fb.innerHTML='';
+  const findings=d.findings||[];
+
+  if(findings.length===0){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td colspan="5" style="text-align:center;padding:32px;color:var(--ok)">
+      ✓ Brak wykrytych literówek ani rozbieżności</td>`;
+    fb.appendChild(tr);
+  }
+
+  findings.forEach(f=>{
+    const tr=document.createElement('tr');
+    tr.className=`sev-${f.severity}`;
+    tr.dataset.sev=f.severity;
+    tr.dataset.cat=f.category;
+
+    // Podświetl I vs 1 w wartościach
+    let valHtml='';
+    if(f.val_a||f.val_b){
+      const va=f.val_a?highlightI1(esc(f.val_a)):'<span style="color:var(--muted)">—</span>';
+      const vb=f.val_b?highlightI1(esc(f.val_b)):'<span style="color:var(--muted)">—</span>';
+      valHtml=`<div class="val-block">
+        <span class="val-a">${va}</span>
+        <span class="val-arrow">→</span>
+        <span class="val-b">${vb}</span>
+      </div>`;
+    }
+
+    const sugHtml=f.suggestion?`<div class="suggestion">💡 ${esc(f.suggestion)}</div>`:'';
+
+    tr.innerHTML=`
+      <td>${sevPill(f.severity)}</td>
+      <td><span class="cat-badge cat-${f.category}">${catLabel(f.category)}</span></td>
+      <td style="font-size:12px;color:var(--muted)">${esc(f.field_name)}</td>
+      <td>
+        <div style="font-size:13px">${esc(f.description)}</div>
+        ${valHtml}
+        ${sugHtml}
+      </td>
+      <td style="font-size:11px;color:var(--muted);text-align:center">✓</td>`;
+    fb.appendChild(tr);
+  });
+
+  // Reset filter
+  currentF='all';
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.fbtn.a-all').classList.add('active');
+
+  document.getElementById('res').classList.add('on');
+  document.getElementById('res').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// ─── filter ────────────────────────────────────────────────────────────────
+let currentF='all';
+function setF(f,btn){
+  currentF=f;
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('#fBody tr').forEach(tr=>{
+    const sev=tr.dataset.sev||'';
+    const cat=tr.dataset.cat||'';
+    let show=true;
+    if(f==='error')   show=sev==='error';
+    else if(f==='warning') show=sev==='warning';
+    else if(f==='info')    show=sev==='info';
+    else if(f==='I_vs_1')  show=cat==='I_vs_1';
+    tr.classList.toggle('hidden-row',!show);
+  });
+}
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+function highlightI1(text){
+  // Podświetl cyfry 1 i 0 które mogą być literami I i O
+  return text.replace(/([1I0Ol])/g, (m,c) => {
+    if(c==='1'||c==='I') return `<span class="hl-i1">${c}</span>`;
+    return m;
+  });
+}
+
+function sevPill(s){
+  const m={error:['błąd','p-err'],warning:['ostrzeż.','p-warn'],info:['uwaga','p-info']};
+  const [l,c]=m[s]||[s,'p-info'];
+  return `<span class="sev-pill ${c}">${l}</span>`;
+}
+
+function catLabel(c){
+  const m={
+    'I_vs_1':'I ↔ 1 / O ↔ 0',
+    'literowka':'literówka',
+    'brak_dokumentu':'brak ref.',
+    'ilosc':'ilość',
+    'wartosc':'wartość',
+    'format':'format',
+    'warunki':'warunki',
+  };
+  return m[c]||c;
+}
+
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+(async function loadTemplates(){
+  try{
+    const r=await fetch('/api/templates?page_type=typo');
+    if(!r.ok)return;
+    const list=await r.json();
+    const sel=document.getElementById('tplSel');
+    list.forEach(t=>{const o=document.createElement('option');o.value=t.id;o.textContent=t.name+(t.is_public?' 🌐':'');sel.appendChild(o)});
+    sel._data=list;
+  }catch(e){}
+})();
+function applyTemplate(id){
+  if(!id)return;
+  const sel=document.getElementById('tplSel');
+  const list=sel._data||[];
+  const tpl=list.find(t=>String(t.id)===String(id));
+  if(tpl){
+    document.getElementById('tplApplied').style.display='inline';
+    fetch('/api/templates/'+id+'/use',{method:'POST'}).catch(()=>{});
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Ustawienia postojowego — DocCompare{% endblock %}
+{% block extra_head %}
+<style>
+.ds-wrap{max-width:680px}
+.ds-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:18px}
+.ds-card h2{font-size:14px;font-weight:600;margin-bottom:4px}
+.ds-card p.hint{font-size:12px;color:var(--muted);margin-bottom:16px}
+.ds-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.ds-field label{display:block;font-size:12px;font-weight:600;margin-bottom:5px}
+.ds-field .sub{font-size:11px;color:var(--muted);font-weight:400}
+.ds-field input{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;
+  background:var(--bg);color:var(--text);font-size:14px;font-family:var(--mono)}
+.ds-field input:focus{outline:none;border-color:var(--accent)}
+.ds-actions{display:flex;align-items:center;gap:12px;margin-top:6px}
+.btn-primary{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-weight:600;font-size:13px;cursor:pointer}
+.btn-primary:hover{filter:brightness(1.08)}
+#dsMsg{font-size:12px}
+.legend{font-size:12px;color:var(--muted);line-height:1.7}
+.legend b{color:var(--text)}
+</style>
+{% endblock %}
+
+{% block page_title %}Ustawienia postojowego{% endblock %}
+
+{% block content %}
+<div class="ds-wrap">
+  <div class="page-header">
+    <h1>⏱️ Ryzyko postojowe — ustawienia</h1>
+    <p>Parametry liczenia demurrage i detention dla kontenerów w module transportu.
+       <a href="/transport/queue" style="color:var(--accent)">← wróć do kolejki</a></p>
+  </div>
+
+  <div class="ds-card">
+    <h2>Dni wolne (free time)</h2>
+    <p class="hint">Liczba dni bez opłat. Demurrage liczone od rozładunku do odbioru kontenera,
+       detention od odbioru do zwrotu pustego.</p>
+    <div class="ds-grid">
+      <div class="ds-field">
+        <label>Demurrage <span class="sub">(dni)</span></label>
+        <input type="number" id="demurrage_free_days" min="0" value="{{ cfg.demurrage_free_days }}">
+      </div>
+      <div class="ds-field">
+        <label>Detention <span class="sub">(dni)</span></label>
+        <input type="number" id="detention_free_days" min="0" value="{{ cfg.detention_free_days }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="ds-card">
+    <h2>Próg ostrzeżenia i stawki</h2>
+    <p class="hint">Próg żółtego alarmu (ile dni przed końcem free time) oraz szacowany koszt
+       za każdy dzień po przekroczeniu. Stawki opcjonalne — 0 = nie pokazuj kosztu.</p>
+    <div class="ds-grid">
+      <div class="ds-field">
+        <label>🟡 Ostrzeżenie <span class="sub">(dni do końca)</span></label>
+        <input type="number" id="warn_days" min="0" value="{{ cfg.warn_days }}">
+      </div>
+      <div class="ds-field"></div>
+      <div class="ds-field">
+        <label>Stawka demurrage <span class="sub">(€/dzień)</span></label>
+        <input type="number" id="demurrage_rate_per_day" min="0" step="0.01" value="{{ cfg.demurrage_rate_per_day }}">
+      </div>
+      <div class="ds-field">
+        <label>Stawka detention <span class="sub">(€/dzień)</span></label>
+        <input type="number" id="detention_rate_per_day" min="0" step="0.01" value="{{ cfg.detention_rate_per_day }}">
+      </div>
+    </div>
+    <div class="ds-actions">
+      <button class="btn-primary" onclick="saveDemurrage()">💾 Zapisz</button>
+      <span id="dsMsg"></span>
+    </div>
+  </div>
+
+  <div class="ds-card">
+    <h2>Jak liczone są poziomy ryzyka</h2>
+    <p class="legend">
+      🟢 <b>Zielony</b> — więcej niż {{ cfg.warn_days }} dni do końca free time<br>
+      🟡 <b>Żółty</b> — zostało ≤ {{ cfg.warn_days }} dni (alert dla managerów)<br>
+      🔴 <b>Czerwony</b> — free time przekroczony, naliczany szacowany koszt<br>
+      <span style="font-size:11px">Daty rozładunku / odbioru / zwrotu pobierane są ze zdarzeń trackingu (API);
+      można je też nadpisać ręcznie na kontenerze.</span>
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+async function saveDemurrage(){
+  const keys=['demurrage_free_days','detention_free_days','warn_days','demurrage_rate_per_day','detention_rate_per_day'];
+  const payload={};
+  keys.forEach(k=>{ payload[k]=document.getElementById(k).value; });
+  const msg=document.getElementById('dsMsg');
+  msg.style.color='var(--muted)'; msg.textContent='Zapisywanie…';
+  try{
+    const r=await fetch('/api/settings/demurrage',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRF-Token':(typeof getCsrf==='function'?getCsrf():'')},
+      body:JSON.stringify(payload)
+    });
+    const d=await r.json().catch(()=>({}));
+    if(r.ok && d.ok){ msg.style.color='#34d399'; msg.textContent='✓ Zapisano'; }
+    else{ msg.style.color='#f87171'; msg.textContent=d.error||'Błąd zapisu'; }
+  }catch(e){ msg.style.color='#f87171'; msg.textContent='Błąd połączenia'; }
+}
+</script>
+{% endblock %}

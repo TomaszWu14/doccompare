@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+{% block title %}Kolejka transportu — DocCompare{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── STATS ────────────────────────────────────────────────────────────────── */
+.tq-stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.tq-stat {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 20px; min-width: 110px; text-align: center;
+}
+.tq-stat-val { font-size: 22px; font-weight: 800; color: var(--text); font-family: var(--mono); }
+.tq-stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; font-weight: 600;
+               text-transform: uppercase; letter-spacing: .4px; }
+.tq-stat.red    .tq-stat-val { color: var(--error); }
+.tq-stat.orange .tq-stat-val { color: var(--warn); }
+.tq-stat.green  .tq-stat-val { color: var(--ok); }
+.tq-stat.blue   .tq-stat-val { color: var(--accent); }
+
+/* ── BUTTONS ──────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); transition: all .12s; white-space: nowrap; text-decoration: none;
+}
+.btn:hover { border-color: var(--muted); }
+.btn-primary  { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover  { opacity: .88; }
+.btn-sm { padding: 5px 11px; font-size: 12px; }
+.btn-icon { padding: 5px 8px; font-size: 13px; }
+.btn-danger { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.btn-danger:hover { background: #fca5a5; }
+[data-theme="dark"] .btn-danger  { background: #2d0a0a; color: #f87171; border-color: #7f1d1d; }
+
+/* ── TABLE ────────────────────────────────────────────────────────────────── */
+.tq-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.tq-table-wrap { overflow-x: auto; }
+table.tq-table { width: 100%; border-collapse: collapse; }
+table.tq-table th {
+  background: var(--surface2); color: var(--muted);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+table.tq-table td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  font-size: 13px; color: var(--text); vertical-align: middle;
+}
+table.tq-table tr:last-child td { border-bottom: none; }
+table.tq-table tr:hover td { background: var(--surface2); }
+
+.mono { font-family: var(--mono); font-size: 12px; }
+.muted-sm { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ── DELIVERY STATUS PILL ─────────────────────────────────────────────────── */
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; white-space: nowrap;
+  background: var(--surface2); color: var(--muted); border: 1px solid var(--border);
+}
+.pill-prio-pilny { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+[data-theme="dark"] .pill-prio-pilny { background: #2d0a0a; color: #f87171; border-color: #7f1d1d; }
+
+/* ── ASSIGN CONTAINER ─────────────────────────────────────────────────────── */
+.assign-box { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+.assign-input, .assign-sealine {
+  padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px;
+  font-size: 12px; color: var(--text); background: var(--surface); font-family: var(--mono);
+}
+.assign-input { width: 130px; text-transform: uppercase; }
+.assign-sealine { width: 64px; text-transform: uppercase; }
+.assign-input:focus, .assign-sealine:focus { outline: none; border-color: var(--accent); }
+.seal-tag { font-size: 10px; background: var(--surface2); color: var(--muted);
+            border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; margin-left: 5px; }
+
+/* ── PROGRESS BAR ─────────────────────────────────────────────────────────── */
+.prog { height: 8px; background: var(--surface2); border-radius: 6px; overflow: hidden; min-width: 100px; }
+.prog-bar { height: 100%; background: var(--accent); border-radius: 6px; transition: width .3s; }
+.prog-bar.done { background: #059669; }
+.prog-lbl { font-size: 10px; color: var(--muted); margin-top: 3px; display: flex;
+            justify-content: space-between; gap: 8px; }
+
+/* ── ETA COUNTDOWN ────────────────────────────────────────────────────────── */
+.eta-urgent { color: var(--error); font-weight: 700; }
+.eta-soon   { color: var(--warn); font-weight: 600; }
+.eta-ok     { color: var(--ok); }
+.eta-days   { font-size: 11px; display: block; margin-top: 1px; }
+
+/* ── RADOM DATE ──────────────────────────────────────────────────────────── */
+.radom { font-weight: 700; color: var(--text); font-family: var(--mono); font-size: 12px; }
+.radom-est { font-size: 10px; color: var(--muted); font-weight: 600; }
+
+/* ── DEMURRAGE ────────────────────────────────────────────────────────────── */
+.dem-badge  { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 8px;
+              white-space: nowrap; display: inline-block; border: 1px solid transparent; }
+.dem-green  { background: #dcfce7; color: #166534; border-color: #86efac; }
+.dem-amber  { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.dem-red    { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.dem-cost   { font-size: 10px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+[data-theme="dark"] .dem-green { background: #052e16; color: #4ade80; border-color: #166534; }
+[data-theme="dark"] .dem-amber { background: #3a2c08; color: #fcd34d; border-color: #92400e; }
+[data-theme="dark"] .dem-red   { background: #3a0c0c; color: #fca5a5; border-color: #991b1b; }
+
+/* empty state */
+.empty-state-row td { text-align: center; padding: 52px 20px; color: var(--muted); }
+</style>
+{% endblock %}
+
+{% block page_title %}Kolejka transportu{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1>🚢 Kolejka transportu</h1>
+    <p>Dostawy z panelu zakładania dostaw — przypisz kontener, a wskoczy do śledzenia przez API
+       (statusy, mapa pozycji, pasek postępu). Data dostawy do magazynu w Radomiu = rozładunek + 3 dni.</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <a href="/dostawy" class="btn">📦 Panel dostaw</a>
+    {% if role in ['manager','admin','superuser'] %}
+    <a href="/settings/demurrage" class="btn" title="Ustawienia ryzyka postojowego">⚙️ Postojowe</a>
+    {% endif %}
+  </div>
+</div>
+
+{# ── STATS ─────────────────────────────────────────────────────────────────── #}
+<div class="tq-stats">
+  <div class="tq-stat">
+    <div class="tq-stat-val">{{ items | length }}</div>
+    <div class="tq-stat-lbl">Dostawy</div>
+  </div>
+  <div class="tq-stat blue">
+    <div class="tq-stat-val">{{ cnt_with_container or 0 }}</div>
+    <div class="tq-stat-lbl">📦 Z kontenerem</div>
+  </div>
+  <div class="tq-stat green">
+    <div class="tq-stat-val">{{ cnt_in_transit or 0 }}</div>
+    <div class="tq-stat-lbl">🚢 W transporcie</div>
+  </div>
+  <div class="tq-stat red">
+    <div class="tq-stat-val">{{ cnt_urgent or 0 }}</div>
+    <div class="tq-stat-lbl">🔴 ETA ≤ 3 dni</div>
+  </div>
+  <div class="tq-stat {{ 'red' if at_risk_count else '' }}">
+    <div class="tq-stat-val">{{ at_risk_count or 0 }}</div>
+    <div class="tq-stat-lbl">⏱️ Ryzyko postojowe</div>
+  </div>
+  <div class="tq-stat blue" title="Zapytania do API śledzenia w tym miesiącu (auto-odświeżanie + ręczne 🔄)">
+    <div class="tq-stat-val">{{ api_calls_month or 0 }}</div>
+    <div class="tq-stat-lbl">🛰️ Zapytania API / mies.</div>
+  </div>
+</div>
+
+<p style="font-size:11px;color:var(--muted);margin:-8px 0 16px">
+  ℹ️ Tracking odświeża się automatycznie raz na dobę przy wejściu na tę stronę; przyciskiem 🔄 możesz odświeżyć kontener ręcznie.
+</p>
+
+{# ── TABLE ─────────────────────────────────────────────────────────────────── #}
+<div class="tq-card">
+  <div class="tq-table-wrap">
+    <table class="tq-table">
+      <thead>
+        <tr>
+          <th scope="col">Dostawa / Dostawca</th>
+          <th scope="col">Kontener</th>
+          <th scope="col">Status śledzenia</th>
+          <th scope="col">Postęp trasy</th>
+          <th scope="col">ETA portu</th>
+          <th scope="col">🏭 Dostawa Radom</th>
+          <th scope="col">⏱️ Postojowe</th>
+          <th scope="col">Akcje</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if items %}
+          {% for it in items %}
+          <tr id="tqrow-{{ it.id }}">
+            {# ── Dostawa / dostawca ── #}
+            <td style="min-width:160px">
+              <div><a href="/dostawy/{{ it.nr_zamowienia }}" class="mono" style="font-weight:700;color:var(--accent)">{{ it.nr_zamowienia }}</a></div>
+              <div class="muted-sm">{{ it.supplier_name or it.supplier_code or '—' }}</div>
+              <div style="margin-top:3px">
+                {% if it.priorytet == 'pilny' %}<span class="pill pill-prio-pilny">🔴 Pilny</span>{% endif %}
+                <span class="pill">{{ it.status or 'utworzone' }}</span>
+              </div>
+            </td>
+
+            {# ── Kontener (przypisanie / wyświetlenie) ── #}
+            <td style="min-width:210px">
+              {% if it.container_number %}
+                <div>
+                  <span class="mono" style="font-weight:700">{{ it.container_number }}</span>
+                  {% if it.sealine %}<span class="seal-tag">{{ it.sealine }}</span>{% endif %}
+                  <button type="button" class="btn btn-sm btn-icon btn-danger" title="Odepnij kontener"
+                          onclick="detachContainer({{ it.id }}, {{ it.container_number|tojson }})">✕</button>
+                </div>
+                {% if it.carrier %}<div class="muted-sm">{{ it.carrier }}</div>{% endif %}
+              {% else %}
+                <div class="assign-box">
+                  <input type="text" class="assign-input" id="cn-{{ it.id }}"
+                         placeholder="Nr kontenera" autocomplete="off"
+                         onkeydown="if(event.key==='Enter')assignContainer({{ it.id }}, this)">
+                  <input type="text" class="assign-sealine" id="sl-{{ it.id }}"
+                         placeholder="SCAC" list="sealines" autocomplete="off">
+                  <button type="button" class="btn btn-sm btn-primary"
+                          onclick="assignContainer({{ it.id }}, this)">📦 Śledź</button>
+                </div>
+              {% endif %}
+            </td>
+
+            {# ── Status śledzenia ── #}
+            <td style="min-width:160px">
+              {% if it.container_number %}
+                {% if it.track_status %}
+                  <div style="font-weight:600">{{ it.track_status }}</div>
+                {% else %}
+                  <div class="muted-sm">Brak danych — odśwież</div>
+                {% endif %}
+                {% if it.last_event %}
+                  <div class="muted-sm" title="{{ it.last_event }}">
+                    {{ it.last_event }}{% if it.last_event_date %} · {{ it.last_event_date[:10] }}{% endif %}
+                  </div>
+                {% endif %}
+                {% if it._vessel %}
+                  <div class="muted-sm">🚢 {{ it._vessel }}</div>
+                {% endif %}
+                {% if it.origin_port or it.dest_port %}
+                  <div class="muted-sm">{{ it.origin_port or '?' }} → {{ it.dest_port or '?' }}</div>
+                {% endif %}
+              {% else %}
+                <span class="muted-sm">— kontener nieprzypisany —</span>
+              {% endif %}
+            </td>
+
+            {# ── Postęp trasy ── #}
+            <td style="min-width:120px">
+              {% if it._progress is not none %}
+                <div class="prog">
+                  <div class="prog-bar {{ 'done' if it._progress >= 100 else '' }}" style="width:{{ it._progress }}%"></div>
+                </div>
+                <div class="prog-lbl">
+                  <span>{{ it._etd or '—' }}</span>
+                  <span>{{ it._progress }}%</span>
+                  <span>{{ it._eta or '—' }}</span>
+                </div>
+                {% if it._departure %}
+                  <div class="muted-sm" style="margin-top:3px">
+                    🚢 wypłynął {{ it._departure }}{% if it._transit_days is not none %} · <b style="color:var(--text)">{{ it._transit_days }} dni w trasie</b>{% endif %}
+                  </div>
+                {% endif %}
+              {% elif it.container_number %}
+                <span class="muted-sm">brak ETD/ETA</span>
+              {% else %}
+                <span class="muted-sm">—</span>
+              {% endif %}
+            </td>
+
+            {# ── ETA portu ── #}
+            <td style="min-width:110px">
+              {% if it._eta %}
+                {% if it._days_left is not none %}
+                  {% if it._days_left <= 3 %}
+                    <span class="eta-urgent">{{ it._eta }}</span>
+                    <span class="eta-days eta-urgent">{{ 'dziś/po' if it._days_left <= 0 else 'za ' ~ it._days_left ~ ' dni' }}</span>
+                  {% elif it._days_left <= 14 %}
+                    <span class="eta-soon">{{ it._eta }}</span>
+                    <span class="eta-days eta-soon">za {{ it._days_left }} dni</span>
+                  {% else %}
+                    {{ it._eta }}
+                    <span class="eta-days eta-ok">za {{ it._days_left }} dni</span>
+                  {% endif %}
+                {% else %}{{ it._eta }}{% endif %}
+              {% else %}<span class="muted-sm">—</span>{% endif %}
+            </td>
+
+            {# ── Dostawa Radom (rozładunek + 3 dni) ── #}
+            <td style="min-width:110px">
+              {% if it._radom_date %}
+                <span class="radom">{{ it._radom_date }}</span>
+                {% if it._radom_days_left is not none %}
+                  {% if it._radom_days_left <= 0 %}
+                    <span class="eta-days eta-ok" style="font-weight:700">dostarczono / dziś</span>
+                  {% elif it._radom_days_left <= 3 %}
+                    <span class="eta-days eta-urgent">za {{ it._radom_days_left }} dni</span>
+                  {% elif it._radom_days_left <= 14 %}
+                    <span class="eta-days eta-soon">za {{ it._radom_days_left }} dni</span>
+                  {% else %}
+                    <span class="eta-days eta-ok">za {{ it._radom_days_left }} dni</span>
+                  {% endif %}
+                {% endif %}
+                {% if it._radom_estimated %}
+                  <div class="radom-est" title="Szacunek z ETA — bez potwierdzonego rozładunku">≈ szacowana</div>
+                {% else %}
+                  <div class="radom-est" style="color:var(--ok)" title="Liczona od potwierdzonego rozładunku">✓ z rozładunku</div>
+                {% endif %}
+              {% else %}<span class="muted-sm">—</span>{% endif %}
+            </td>
+
+            {# ── Postojowe (demurrage/detention) ── #}
+            <td style="min-width:120px">
+              {% set rk = it._risk %}
+              {% if rk and rk.overall_level != 'none' %}
+                {% set lv = rk.overall_level %}
+                {% set ph = rk.demurrage if rk.demurrage.level == lv else rk.detention %}
+                {% set is_dem = rk.demurrage.level == lv %}
+                <span class="dem-badge dem-{{ lv }}"
+                      title="{{ 'Demurrage' if is_dem else 'Detention' }}: {{ ph.days_used }} z {{ ph.free_days }} dni wolnych">
+                  {{ '🔴' if lv=='red' else ('🟡' if lv=='amber' else '🟢') }}
+                  {{ 'Dem' if is_dem else 'Det' }} {{ ph.days_used }}/{{ ph.free_days }}d
+                  {% if ph.over_days and ph.over_days > 0 %}<b>+{{ ph.over_days }} po</b>{% endif %}
+                </span>
+                {% if rk.total_cost and rk.total_cost > 0 %}
+                  <div class="dem-cost">~{{ '%.0f'|format(rk.total_cost) }} €</div>
+                {% endif %}
+              {% else %}
+                <span class="muted-sm" title="Brak danych o rozładunku z trackingu">—</span>
+              {% endif %}
+            </td>
+
+            {# ── Akcje ── #}
+            <td style="white-space:nowrap">
+              {% if it.container_number %}
+                <a href="/transport/map/{{ it.container_number }}"
+                   class="btn btn-sm btn-icon" title="Trasa kontenera na mapie">🗺️ Trasa</a>
+                <button type="button" class="btn btn-sm btn-icon" title="Odśwież tracking"
+                        onclick="refreshTracking({{ it.container_number|tojson }}, this)">🔄</button>
+              {% endif %}
+              <a href="/dostawy/{{ it.nr_zamowienia }}" class="btn btn-sm btn-icon" title="Otwórz dostawę">↗</a>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr class="empty-state-row">
+            <td colspan="8">
+              <div style="font-size:44px;margin-bottom:12px">🚢</div>
+              <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">Brak dostaw w kolejce</div>
+              <div>Dostawy pojawią się tu automatycznie po założeniu w <a href="/dostawy" style="color:var(--accent)">panelu dostaw</a>.</div>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# Najczęstsi armatorzy (kod SCAC do trackingu) #}
+<datalist id="sealines">
+  <option value="MAEU">Maersk</option>
+  <option value="MSCU">MSC</option>
+  <option value="COSU">COSCO</option>
+  <option value="HLCU">Hapag-Lloyd</option>
+  <option value="OOLU">OOCL</option>
+  <option value="ONEY">ONE</option>
+  <option value="CMDU">CMA CGM</option>
+  <option value="EGLV">Evergreen</option>
+  <option value="YMLU">Yang Ming</option>
+  <option value="HDMU">HMM</option>
+</datalist>
+
+<script>
+// ── PRZYPISZ KONTENER → automatyczny tracking ────────────────────────────────
+async function assignContainer(id, btn) {
+  const cn = (document.getElementById('cn-' + id).value || '').trim().toUpperCase();
+  const sl = (document.getElementById('sl-' + id).value || '').trim().toUpperCase();
+  if (!cn) { toast('Podaj numer kontenera', 'error'); return; }
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Łączę…';
+  try {
+    const res = await fetch('/api/transport/queue/assign', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({zlecenie_id: id, container_number: cn, sealine: sl})
+    });
+    const d = await res.json();
+    if (!res.ok || d.error) {
+      toast(d.error || 'Błąd przypisania', 'error');
+      btn.disabled = false; btn.textContent = old; return;
+    }
+    toast(d.track_warning || 'Kontener przypisany i przekazany do śledzenia', d.track_warning ? 'warn' : 'ok');
+    setTimeout(() => location.reload(), 800);
+  } catch (e) {
+    toast('Błąd sieci: ' + e.message, 'error');
+    btn.disabled = false; btn.textContent = old;
+  }
+}
+
+// ── ODEPNIJ KONTENER ─────────────────────────────────────────────────────────
+function detachContainer(id, cn) {
+  confirmModal(
+    `Odpiąć kontener ${cn} od tej dostawy? Tracking kontenera zostaje, znika tylko powiązanie.`,
+    async () => {
+      try {
+        const res = await fetch('/api/transport/queue/assign', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({zlecenie_id: id, container_number: ''})
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) { toast(d.error || 'Błąd', 'error'); return; }
+        toast('Kontener odpięty', 'ok');
+        setTimeout(() => location.reload(), 500);
+      } catch (e) { toast('Błąd sieci', 'error'); }
+    },
+    {title: 'Odepnij kontener', okLabel: 'Odepnij', danger: true}
+  );
+}
+
+// ── ODŚWIEŻ TRACKING ─────────────────────────────────────────────────────────
+async function refreshTracking(cn, btn) {
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳';
+  try {
+    const res = await fetch('/api/tracking/track', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({numbers: [cn], provider: 'auto'})
+    });
+    const d = await res.json();
+    if (!res.ok || d.error) {
+      toast(d.error || 'Błąd odświeżania', 'error');
+      btn.disabled = false; btn.textContent = old; return;
+    }
+    toast('Tracking zaktualizowany', 'ok');
+    setTimeout(() => location.reload(), 600);
+  } catch (e) {
+    toast('Błąd sieci: ' + e.message, 'error');
+    btn.disabled = false; btn.textContent = old;
+  }
+}
+</script>
+{% endblock %}

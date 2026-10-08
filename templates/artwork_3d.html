@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Artwork 3D{% endblock %}
+{% block page_title %}Artwork 3D — model opakowania{% endblock %}
+{% block extra_head %}
+<script type="module" src="{{ url_for('static', filename='vendor/model-viewer/model-viewer.min.js') }}"></script>
+<style>
+.a3d-wrap{max-width:1200px;margin:0 auto}
+.a3d-panel{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:20px}
+.a3d-drop{border:2px dashed #d1d5db;border-radius:10px;padding:28px;text-align:center;cursor:pointer;background:#fafafa;transition:all .2s}
+.a3d-drop:hover,.a3d-drop.dragover{border-color:#4f6ef7;background:#f0f4ff}
+.a3d-drop.has-file{border-color:#10b981;border-style:solid}
+.a3d-dims{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
+.a3d-dims input{width:90px;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px}
+.a3d-btn{padding:11px 28px;background:#4f6ef7;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer}
+.a3d-btn:disabled{opacity:.5;cursor:not-allowed}
+.a3d-warn{background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px 14px;margin-top:12px;font-size:13px;color:#92400e}
+.a3d-err{background:#fee2e2;border:1px solid #f87171;border-radius:8px;padding:10px 14px;margin-top:12px;font-size:13px;color:#991b1b}
+.a3d-meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:13px;color:#374151}
+.a3d-meta b{color:#111827}
+model-viewer{width:100%;height:68vh;background:#eef2f7;border-radius:10px}
+.a3d-spin{display:inline-block;width:16px;height:16px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:a3dspin .8s linear infinite;vertical-align:-3px;margin-right:8px}
+@keyframes a3dspin{to{transform:rotate(360deg)}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="a3d-wrap">
+  <div class="a3d-panel">
+    <h2 style="font-size:17px;font-weight:700;margin-bottom:6px">Generuj model 3D z artworku (dieline PDF)</h2>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:16px">
+      Wgraj artwork opakowania (siatkę/dieline). Aplikacja odczyta wymiary z tabelki,
+      wytnie panele ścian i złoży obracalny model 3D opakowania.
+    </p>
+    <div class="a3d-drop" id="a3dDrop">
+      <input type="file" id="a3dFile" accept="application/pdf" style="display:none">
+      <div style="font-size:30px">📦</div>
+      <div style="font-weight:600;color:#374151" id="a3dDropLabel">Kliknij lub upuść PDF z dieline</div>
+      <div style="font-size:12px;color:#9ca3af">PDF, max {{ max_upload_mb }} MB</div>
+    </div>
+    <div class="a3d-dims">
+      <span style="font-size:13px;color:#6b7280">Wymiary [mm] (opcjonalnie — jeśli brak w PDF):</span>
+      <input type="number" id="dimW" placeholder="szer." min="5" max="2000" step="0.1">
+      ×
+      <input type="number" id="dimH" placeholder="wys." min="5" max="2000" step="0.1">
+      ×
+      <input type="number" id="dimD" placeholder="głęb." min="5" max="2000" step="0.1">
+      <button class="a3d-btn" id="a3dGo" disabled>Generuj model 3D</button>
+    </div>
+    <div id="a3dMsg"></div>
+  </div>
+
+  <div class="a3d-panel" id="a3dViewerPanel" style="display:none">
+    <model-viewer id="a3dViewer"
+                  camera-controls auto-rotate
+                  exposure="0.9" shadow-intensity="0.6"
+                  interaction-prompt="none"
+                  alt="Model 3D opakowania"></model-viewer>
+    <div class="a3d-meta" id="a3dMeta"></div>
+  </div>
+</div>
+{% endblock %}
+{% block body_scripts %}
+<script>
+(function(){
+  const drop = document.getElementById('a3dDrop');
+  const fileInput = document.getElementById('a3dFile');
+  const label = document.getElementById('a3dDropLabel');
+  const btn = document.getElementById('a3dGo');
+  const msg = document.getElementById('a3dMsg');
+  let file = null;
+
+  drop.addEventListener('click', () => fileInput.click());
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('dragover');
+    if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files.length) setFile(fileInput.files[0]); });
+
+  function setFile(f){
+    if (!f.name.toLowerCase().endsWith('.pdf')) { showMsg('Wybierz plik PDF.', 'err'); return; }
+    file = f;
+    drop.classList.add('has-file');
+    label.textContent = f.name;
+    btn.disabled = false;
+    msg.innerHTML = '';
+  }
+
+  function showMsg(text, kind){
+    msg.innerHTML = '<div class="a3d-' + (kind === 'err' ? 'err' : 'warn') + '"></div>';
+    msg.firstChild.textContent = text;
+  }
+
+  btn.addEventListener('click', async () => {
+    if (!file) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="a3d-spin"></span>Generowanie…';
+    msg.innerHTML = '';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      for (const [id, key] of [['dimW','w_mm'],['dimH','h_mm'],['dimD','d_mm']]) {
+        const v = document.getElementById(id).value;
+        if (v) fd.append(key, v);
+      }
+      const res = await fetch('/api/artwork/3d', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || ('HTTP ' + res.status));
+
+      document.getElementById('a3dViewerPanel').style.display = '';
+      document.getElementById('a3dViewer').src = data.glb_url;
+      const meta = document.getElementById('a3dMeta');
+      meta.innerHTML = '';
+      const parts = [
+        ['Wymiary', data.dims_mm.map(v => +v.toFixed(1)).join(' × ') + ' mm'],
+        ['Typ', data.package_type || '—'],
+        ['EAN', data.ean || '—'],
+        ['Panele z siatki', (data.panels_found || []).join(', ') || '—'],
+      ];
+      for (const [k, v] of parts) {
+        const el = document.createElement('span');
+        const b = document.createElement('b'); b.textContent = k + ': ';
+        el.appendChild(b); el.appendChild(document.createTextNode(v));
+        meta.appendChild(el);
+      }
+      if (data.warnings && data.warnings.length) showMsg(data.warnings.join(' '), 'warn');
+      document.getElementById('a3dViewerPanel').scrollIntoView({ behavior: 'smooth' });
+    } catch (err) {
+      showMsg('Błąd generowania: ' + err.message, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Generuj model 3D';
+    }
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% block title %}Raport kontenera — DocCompare{% endblock %}
+{% block extra_head %}
+<style>
+  .sub { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+
+  /* Drop zone grid */
+  .slot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .slot { background: var(--surface); border: 2px dashed var(--border); border-radius: 12px; padding: 28px 20px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; position: relative; }
+  .slot:hover, .slot.over { border-color: var(--accent); background: rgba(91,155,255,.04); }
+  .slot.has { border-color: var(--ok); border-style: solid; }
+  .slot input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .slot-icon { font-size: 26px; margin-bottom: 8px; }
+  .slot-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; color: var(--text); }
+  .slot-sub { font-size: 12px; color: var(--muted); }
+  .slot-optional { display: inline-block; font-size: 10px; font-family: var(--mono); color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; margin-top: 4px; }
+  .slot-name { font-family: var(--mono); font-size: 12px; color: var(--ok); margin-top: 8px; word-break: break-all; }
+
+  /* Run button */
+  .run-row { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+  .btn-run { background: var(--accent); color: #fff; border: none; border-radius: 9px; padding: 11px 28px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+  .btn-run:hover { opacity: .85; }
+  .btn-run:disabled { opacity: .35; cursor: not-allowed; }
+
+  /* Loader */
+  .loader { display: none; text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
+  .loader.on { display: block; }
+  .spin { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Error box */
+  .err-box { display: none; background: rgba(255,92,92,.08); border: 1px solid rgba(255,92,92,.25); border-radius: 9px; padding: 14px 18px; color: var(--error); font-size: 14px; margin-bottom: 16px; }
+  .err-box.on { display: block; }
+
+  /* Results */
+  .results { display: none; }
+  .results.on { display: block; }
+
+  /* Summary bar */
+  .summary-bar { display: flex; align-items: center; gap: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; margin-bottom: 20px; flex-wrap: wrap; }
+  .summary-risk { font-size: 28px; }
+  .summary-text { flex: 1; }
+  .summary-title { font-size: 15px; font-weight: 700; }
+  .summary-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .stat-pill { display: flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; font-family: var(--mono); }
+  .stat-pill-ok  { background: rgba(5,150,105,.12); color: var(--ok);   border: 1px solid rgba(5,150,105,.2); }
+  .stat-pill-err { background: rgba(220,38,38,.12); color: var(--error); border: 1px solid rgba(220,38,38,.2); }
+
+  /* Files section */
+  .files-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .file-tag { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  /* Checks table */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 9px 14px; font-size: 10px; font-family: var(--mono); letter-spacing: 1px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surface2); white-space: nowrap; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr.row-ok:hover td { background: rgba(5,150,105,.03); }
+  tr.row-err:hover td { background: rgba(220,38,38,.03); }
+  .row-ok td:first-child  { border-left: 3px solid var(--ok); }
+  .row-err td:first-child { border-left: 3px solid var(--error); }
+
+  /* Status badges */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; font-family: var(--mono); white-space: nowrap; }
+  .badge-ok  { background: rgba(5,150,105,.12); color: var(--ok);   border: 1px solid rgba(5,150,105,.25); }
+  .badge-err { background: rgba(220,38,38,.12); color: var(--error); border: 1px solid rgba(220,38,38,.25); }
+
+  /* Value cell */
+  .doc-val { display: flex; flex-direction: column; gap: 3px; }
+  .doc-val-item { display: flex; align-items: baseline; gap: 6px; }
+  .doc-label { font-size: 10px; color: var(--muted); font-family: var(--mono); flex-shrink: 0; }
+  .doc-text { font-size: 13px; font-family: var(--mono); }
+  .doc-text-err  { color: var(--error); font-weight: 500; }
+  .doc-text-ok   { color: var(--text); }
+
+  /* Export/print button */
+  .export-bar { display: flex; gap: 10px; align-items: center; padding-top: 14px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .btn-print { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--text); cursor: pointer; transition: border-color .15s; }
+  .btn-print:hover { border-color: var(--accent); }
+
+  /* Empty checks */
+  .no-checks { text-align: center; padding: 36px; color: var(--muted); font-size: 14px; }
+
+  @media (max-width: 768px) {
+    .slot-grid { grid-template-columns: 1fr; }
+  }
+  @media print {
+    .run-row, .slot-grid, .err-box, .loader, .export-bar { display: none !important; }
+    .results { display: block !important; }
+  }
+</style>
+{% endblock %}
+
+{% block page_title %}Porównanie paczek{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>📦 Raport spójności kontenera (Krok 26)</h1>
+  <p class="sub">Wgraj dokumenty kontenera — system porówna wartości między wszystkimi dokumentami i sprawdzi spójność. &nbsp;<span style="font-size:11px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--border);border-radius:20px;padding:2px 9px;font-weight:600;vertical-align:middle">🔁 Zakupy + Transport</span></p>
+</div>
+
+<!-- UPLOAD SLOTS -->
+<div class="slot-grid">
+
+  <!-- Invoice (CI) -->
+  <div class="slot" id="slot-invoice">
+    <input type="file" id="file-invoice" accept=".pdf" onchange="onFileChange('invoice', this)">
+    <div class="slot-icon">🧾</div>
+    <div class="slot-title">Faktura handlowa (CI)</div>
+    <div class="slot-sub">Commercial Invoice</div>
+    <div class="slot-name" id="name-invoice"></div>
+  </div>
+
+  <!-- Bill of Lading -->
+  <div class="slot" id="slot-bol">
+    <input type="file" id="file-bol" accept=".pdf" onchange="onFileChange('bol', this)">
+    <div class="slot-icon">🚢</div>
+    <div class="slot-title">Bill of Lading (BOL)</div>
+    <div class="slot-sub">Konosament</div>
+    <span class="slot-optional">opcjonalne</span>
+    <div class="slot-name" id="name-bol"></div>
+  </div>
+
+  <!-- Transport invoice -->
+  <div class="slot" id="slot-transport_invoice">
+    <input type="file" id="file-transport_invoice" accept=".pdf" onchange="onFileChange('transport_invoice', this)">
+    <div class="slot-icon">🚚</div>
+    <div class="slot-title">Faktura transportowa</div>
+    <div class="slot-sub">Freight / Shipping Invoice</div>
+    <span class="slot-optional">opcjonalne</span>
+    <div class="slot-name" id="name-transport_invoice"></div>
+  </div>
+
+  <!-- SAD -->
+  <div class="slot" id="slot-sad">
+    <input type="file" id="file-sad" accept=".pdf" onchange="onFileChange('sad', this)">
+    <div class="slot-icon">🛃</div>
+    <div class="slot-title">SAD / ZC415</div>
+    <div class="slot-sub">Deklaracja celna / SAD</div>
+    <div class="slot-name" id="name-sad"></div>
+  </div>
+
+</div>
+
+<div class="run-row">
+  <button type="button" class="btn-run" id="btnRun" onclick="runBundle()">🔍 Sprawdź spójność</button>
+  <span style="font-size:12px;color:var(--muted)">Wymagane: min. 2 dokumenty (np. CI + SAD)</span>
+</div>
+
+<div class="err-box" id="errBox"></div>
+<div class="loader" id="ldr">
+  <div class="spin"></div>
+  Analizuję dokumenty kontenera…
+</div>
+
+<!-- RESULTS -->
+<div class="results" id="results" aria-live="polite" aria-atomic="false">
+
+  <!-- Summary bar -->
+  <div class="summary-bar" id="summaryBar">
+    <div class="summary-risk" id="summaryIcon">📦</div>
+    <div class="summary-text">
+      <div class="summary-title" id="summaryTitle"></div>
+      <div class="summary-sub" id="summarySub"></div>
+    </div>
+    <div class="stat-pill stat-pill-err" id="statErr" style="display:none">
+      <span>✕</span><span id="statErrNum">0</span> różnice
+    </div>
+    <div class="stat-pill stat-pill-ok" id="statOk" style="display:none">
+      <span>✓</span><span id="statOkNum">0</span> zgodne
+    </div>
+  </div>
+
+  <!-- Files used -->
+  <div class="files-row" id="filesRow"></div>
+
+  <!-- Checks table -->
+  <div class="table-wrap" id="checksTable">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col" style="width:18%">Pole</th>
+          <th scope="col">Wartości z dokumentów</th>
+          <th scope="col" style="width:12%">Status</th>
+          <th scope="col" style="width:22%">Komentarz</th>
+        </tr>
+      </thead>
+      <tbody id="checksBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Export -->
+  <div class="export-bar">
+    <span style="font-size:12px;color:var(--muted);font-family:var(--mono)">EKSPORT:</span>
+    <button type="button" class="btn-print" onclick="window.print()">🖨️ Drukuj / PDF</button>
+  </div>
+
+</div><!-- /results -->
+
+<script>
+// ── Drag & drop setup ────────────────────────────────────────────────────────
+['invoice', 'bol', 'transport_invoice', 'sad'].forEach(function(slot) {
+  var zone = document.getElementById('slot-' + slot);
+  zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', function() { zone.classList.remove('over'); });
+  zone.addEventListener('drop', function(e) {
+    e.preventDefault(); zone.classList.remove('over');
+    var file = e.dataTransfer.files[0];
+    if (file && file.name.toLowerCase().endsWith('.pdf')) {
+      var inp = document.getElementById('file-' + slot);
+      var dt = new DataTransfer(); dt.items.add(file); inp.files = dt.files;
+      onFileChange(slot, inp);
+    }
+  });
+});
+
+function onFileChange(slot, inp) {
+  var nameEl = document.getElementById('name-' + slot);
+  var zone   = document.getElementById('slot-' + slot);
+  if (inp.files && inp.files[0]) {
+    nameEl.textContent = '✓ ' + inp.files[0].name;
+    zone.classList.add('has');
+  } else {
+    nameEl.textContent = '';
+    zone.classList.remove('has');
+  }
+}
+
+// ── Submit ───────────────────────────────────────────────────────────────────
+async function runBundle() {
+  var slots = ['invoice', 'bol', 'transport_invoice', 'sad'];
+  var loaded = 0;
+  var fd = new FormData();
+  slots.forEach(function(s) {
+    var f = document.getElementById('file-' + s).files[0];
+    if (f) { fd.append(s, f); loaded++; }
+  });
+  if (loaded < 2) {
+    showErr('Wgraj co najmniej 2 dokumenty (np. Faktura handlowa + SAD).');
+    return;
+  }
+
+  document.getElementById('errBox').classList.remove('on');
+  document.getElementById('results').classList.remove('on');
+  document.getElementById('ldr').classList.add('on');
+  document.getElementById('btnRun').disabled = true;
+
+  try {
+    var r = await fetch('/api/bundle/compare', { method: 'POST', body: fd });
+    var d = await r.json();
+    if (!r.ok || d.error) { showErr(d.error || 'Błąd serwera'); return; }
+    renderResults(d);
+  } catch (e) {
+    showErr('Błąd połączenia: ' + e.message);
+  } finally {
+    document.getElementById('ldr').classList.remove('on');
+    document.getElementById('btnRun').disabled = false;
+  }
+}
+
+function showErr(msg) {
+  var box = document.getElementById('errBox');
+  box.textContent = '✕ ' + msg;
+  box.classList.add('on');
+  document.getElementById('ldr').classList.remove('on');
+  document.getElementById('btnRun').disabled = false;
+}
+
+// ── Render results ───────────────────────────────────────────────────────────
+function renderResults(d) {
+  var hasErr = d.error_count > 0;
+
+  // Summary
+  document.getElementById('summaryIcon').textContent  = hasErr ? '⚠️' : '✅';
+  document.getElementById('summaryTitle').textContent = hasErr
+    ? 'Wykryto rozbieżności między dokumentami kontenera!'
+    : 'Dokumenty kontenera są spójne';
+  document.getElementById('summarySub').textContent   =
+    'Sprawdzono ' + (d.checks ? d.checks.length : 0) + ' pól w ' + Object.keys(d.files || {}).length + ' dokumentach.';
+
+  if (d.error_count > 0) {
+    document.getElementById('statErrNum').textContent = d.error_count;
+    document.getElementById('statErr').style.display = 'flex';
+  } else {
+    document.getElementById('statErr').style.display = 'none';
+  }
+  if (d.ok_count > 0) {
+    document.getElementById('statOkNum').textContent = d.ok_count;
+    document.getElementById('statOk').style.display = 'flex';
+  } else {
+    document.getElementById('statOk').style.display = 'none';
+  }
+
+  // Files used
+  var fr = document.getElementById('filesRow');
+  fr.innerHTML = '';
+  Object.entries(d.files || {}).forEach(function(kv) {
+    var tag = document.createElement('div');
+    tag.className = 'file-tag';
+    tag.innerHTML = '📄 <strong>' + esc(kv[0]) + ':</strong> ' + esc(kv[1]);
+    fr.appendChild(tag);
+  });
+
+  // Checks table
+  var tbody = document.getElementById('checksBody');
+  tbody.innerHTML = '';
+  var checks = d.checks || [];
+  if (checks.length === 0) {
+    var emptyRow = document.createElement('tr');
+    emptyRow.innerHTML = '<td colspan="4"><div class="no-checks">Brak pól do porównania — dokumenty nie zawierają wspólnych nagłówków.</div></td>';
+    tbody.appendChild(emptyRow);
+  } else {
+    checks.forEach(function(c) {
+      var isErr = c.status === 'roznica';
+      var tr = document.createElement('tr');
+      tr.className = isErr ? 'row-err' : 'row-ok';
+
+      // Build values cell
+      var valsHtml = '<div class="doc-val">';
+      Object.entries(c.values || {}).forEach(function(kv) {
+        valsHtml += '<div class="doc-val-item">'
+          + '<span class="doc-label">' + esc(kv[0]) + ':</span>'
+          + '<span class="doc-text ' + (isErr ? 'doc-text-err' : 'doc-text-ok') + '">' + esc(kv[1]) + '</span>'
+          + '</div>';
+      });
+      valsHtml += '</div>';
+
+      var badge = isErr
+        ? '<span class="badge badge-err">✕ Różnica</span>'
+        : '<span class="badge badge-ok">✓ Zgodne</span>';
+
+      tr.innerHTML = '<td><strong>' + esc(c.field) + '</strong></td>'
+        + '<td>' + valsHtml + '</td>'
+        + '<td>' + badge + '</td>'
+        + '<td style="font-size:12px;color:var(--muted)">' + esc(c.comment || '') + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('results').classList.add('on');
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+{% endblock %}

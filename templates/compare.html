@@ -1,0 +1,847 @@
+{% extends "base.html" %}
+{% block title %}Porównaj — DocCompare{% endblock %}
+{% block extra_head %}
+<style>
+  h1{font-size:20px;font-weight:500;margin-bottom:5px}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:22px}
+  .badge-local{display:inline-flex;align-items:center;gap:6px;font-size:11px;
+    font-family:var(--mono);color:var(--ok);background:rgba(61,219,160,.1);
+    border:1px solid rgba(61,219,160,.2);border-radius:20px;padding:3px 10px;margin-bottom:20px}
+
+  /* UPLOAD */
+  .upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+  .drop{background:var(--surface);border:2px dashed var(--border);border-radius:12px;
+    padding:34px 20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative}
+  .drop:hover,.drop.over{border-color:var(--accent);background:rgba(91,155,255,.04)}
+  .drop.has{border-color:var(--ok);border-style:solid}
+  .drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .drop-icon{font-size:24px;margin-bottom:8px}
+  .drop-label{font-size:13px;font-weight:500;margin-bottom:3px}
+  .drop-sub{font-size:12px;color:var(--muted)}
+  .drop-name{font-family:var(--mono);font-size:12px;color:var(--ok);margin-top:7px;word-break:break-all}
+
+  /* CONTROLS */
+  .controls{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:13px 16px;display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap}
+  .controls label{font-size:12px;color:var(--muted);font-family:var(--mono)}
+  select{background:var(--bg);border:1px solid var(--border);border-radius:6px;
+    padding:7px 10px;color:var(--text);font-size:13px;outline:none;cursor:pointer}
+  .btn-run{margin-left:auto;background:var(--accent);color:#fff;border:none;border-radius:8px;
+    padding:9px 24px;font-size:14px;font-weight:500;cursor:pointer;transition:opacity .2s}
+  .btn-run:hover{opacity:.85}
+  .btn-run:disabled{opacity:.35;cursor:not-allowed}
+
+  /* ERROR/LOADER */
+  .err-box{display:none;background:rgba(255,92,92,.08);border:1px solid rgba(255,92,92,.25);
+    border-radius:9px;padding:14px 18px;color:var(--error);font-size:14px;margin-bottom:18px}
+  .err-box.on{display:block}
+  .loader{display:none;text-align:center;padding:40px;color:var(--muted);font-size:14px}
+  .loader.on{display:block}
+  .spin{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);
+    border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* RESULTS */
+  .results{display:none}
+  .results.on{display:block}
+
+  /* SUMMARY HEADER */
+  .res-header{display:grid;grid-template-columns:auto 1fr repeat(4,auto);
+    align-items:center;gap:16px;padding:16px 20px;background:var(--surface);
+    border:1px solid var(--border);border-radius:10px;margin-bottom:20px}
+  .risk-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+  .dot-ok{background:var(--ok);box-shadow:0 0 8px rgba(61,219,160,.5)}
+  .dot-fmt{background:#8b9cf8;box-shadow:0 0 8px rgba(123,158,247,.4)}
+  .dot-warn{background:var(--warn);box-shadow:0 0 8px rgba(255,179,71,.5)}
+  .dot-err{background:var(--error);box-shadow:0 0 8px rgba(255,92,92,.5)}
+  .res-summary{font-size:13px;line-height:1.5}
+  .res-meta{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:3px}
+  .stat-box{text-align:center;min-width:64px}
+  .stat-num{font-family:var(--mono);font-size:22px;font-weight:500;line-height:1}
+  .stat-lbl{font-size:10px;color:var(--muted);margin-top:3px}
+  .s-err{color:var(--error)}
+  .s-warn{color:var(--warn)}
+  .s-fmt{color:#8b9cf8}
+  .s-ok{color:var(--ok)}
+
+  /* FILTER BAR */
+  .filter-bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .filter-bar span{font-size:11px;color:var(--muted);font-family:var(--mono);margin-right:4px}
+  .fbtn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:20px;
+    padding:4px 12px;font-size:12px;cursor:pointer;font-family:var(--mono);transition:all .15s}
+  .fbtn:hover{border-color:var(--muted);color:var(--text)}
+  .fbtn.active{color:#fff}
+  .fbtn-all.active{background:#444;border-color:#666}
+  .fbtn-err.active{background:rgba(255,92,92,.25);border-color:var(--error);color:var(--error)}
+  .fbtn-warn.active{background:rgba(255,179,71,.25);border-color:var(--warn);color:var(--warn)}
+  .fbtn-fmt.active{background:rgba(123,158,247,.25);border-color:#8b9cf8;color:#8b9cf8}
+  .fbtn-ok.active{background:rgba(61,219,160,.25);border-color:var(--ok);color:var(--ok)}
+
+  /* CAT FILTER */
+  .cat-filter{display:flex;gap:6px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+  .cat-filter span{font-size:11px;color:var(--muted);font-family:var(--mono);margin-right:4px}
+  .cbtn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;
+    padding:3px 10px;font-size:11px;cursor:pointer;font-family:var(--mono);transition:all .15s}
+  .cbtn:hover,.cbtn.active{background:var(--surface);border-color:var(--accent);color:var(--text)}
+
+  /* TABLE */
+  .sec-title{font-size:11px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--muted);margin:22px 0 10px;font-family:var(--mono)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:8px 10px;font-size:10px;font-family:var(--mono);
+    letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border);
+    background:var(--surface);white-space:nowrap}
+  td{padding:8px 10px;border-bottom:1px solid rgba(42,45,58,.4);vertical-align:middle}
+  tr:hover td{background:rgba(255,255,255,.018)}
+
+  /* ROW LEFT BORDER BY STATUS */
+  .row-roznica td:first-child,.row-brak_w_a td:first-child,.row-brak_w_b td:first-child
+    {border-left:3px solid var(--error)}
+  .row-watpliwe td:first-child{border-left:3px solid var(--warn)}
+  .row-format td:first-child{border-left:3px solid #8b9cf8}
+  .row-ok td:first-child{border-left:3px solid var(--ok)}
+
+  /* VALUE CELLS */
+  .v-err{color:var(--error);font-weight:500}
+  .v-warn{color:var(--warn)}
+  .v-fmt{color:#8b9cf8}
+  .v-ok{color:var(--text)}
+  .v-null{color:var(--muted);font-style:italic;font-size:12px}
+
+  /* PILLS */
+  .pill{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-family:var(--mono);white-space:nowrap}
+  .p-err{background:rgba(255,92,92,.12);color:var(--error)}
+  .p-warn{background:rgba(255,179,71,.12);color:var(--warn)}
+  .p-fmt{background:rgba(123,158,247,.12);color:#8b9cf8}
+  .p-ok{background:rgba(61,219,160,.12);color:var(--ok)}
+  .p-info{background:rgba(107,112,128,.12);color:var(--muted)}
+
+  /* CATEGORY BADGE */
+  .cat-badge{display:inline-block;font-size:9px;padding:1px 6px;border-radius:4px;
+    font-family:var(--mono);background:var(--bg);color:var(--muted);border:1px solid var(--border);
+    white-space:nowrap}
+
+  /* COMMENT */
+  .cmt{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
+  .cmt-warn{color:var(--warn)}
+  .cmt-fmt{color:#8b9cf8}
+
+  /* SIM BAR */
+  .sim-bar{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .sim-track{width:36px;height:4px;background:var(--border);border-radius:2px;display:inline-block}
+  .sim-fill{height:4px;border-radius:2px;background:var(--ok)}
+
+  /* HIDDEN ROW */
+  tr.hidden-row{display:none}
+
+  /* LEGEND */
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px;font-size:11px;color:var(--muted)}
+  .leg-item{display:flex;align-items:center;gap:5px}
+  .leg-dot{width:8px;height:8px;border-radius:50%}
+
+  /* MOBILE CARD VIEW */
+  .card-list{display:none;flex-direction:column;gap:8px;margin-bottom:20px}
+  .finding-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:13px 15px;border-left:4px solid var(--border)}
+  .finding-card.fc-err{border-left-color:var(--error)}
+  .finding-card.fc-warn{border-left-color:var(--warn)}
+  .finding-card.fc-fmt{border-left-color:#8b9cf8}
+  .finding-card.fc-ok{border-left-color:var(--ok)}
+  .fc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+  .fc-field{font-weight:600;font-size:14px}
+  .fc-row{display:flex;gap:6px;margin-bottom:4px;font-size:12px}
+  .fc-label{color:var(--muted);width:22px;flex-shrink:0;font-family:var(--mono)}
+  .fc-val{word-break:break-all}
+  .fc-comment{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4}
+  @media(max-width:760px){
+    table{display:none!important}
+    .card-list{display:flex}
+    .filter-bar,.cat-filter,.sec-title{font-size:12px}
+    .res-header{grid-template-columns:auto 1fr repeat(2,auto);gap:10px}
+  }
+  @media(min-width:761px){
+    .card-list{display:none!important}
+  }
+</style>
+{% endblock %}
+
+{% block page_title %}Porównanie{% endblock %}
+
+{% block content %}
+{% include '_compare_modes.html' %}
+<div class="page-header">
+  <h1>Porównaj dokumenty</h1>
+  <p class="sub">Pełna analiza: błędy krytyczne, wątpliwości, różnice formatowania i pozycje zgodne.</p>
+</div>
+<div class="badge-local">⚙ Silnik lokalny — bez API, bez internetu</div>
+
+<!-- TEMPLATE PICKER -->
+<div id="tplBar" style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+  <label for="tplSel" style="font-size:12px;color:var(--muted);font-family:var(--mono);white-space:nowrap">SZABLON:</label>
+  <select id="tplSel" onchange="applyTemplate(this.value)"
+    style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:13px;outline:none;min-width:200px">
+    <option value="">— wybierz szablon —</option>
+  </select>
+  <span id="tplApplied" style="display:none;font-size:11px;color:var(--ok);font-family:var(--mono)">✓ Szablon zastosowany</span>
+</div>
+
+<!-- DUPLICATE BANNER -->
+<div id="dupBanner" style="display:none;background:rgba(217,119,6,.08);border:1px solid rgba(217,119,6,.3);
+  border-radius:9px;padding:12px 16px;color:var(--warn);font-size:13px;margin-bottom:14px">
+  ⚠️ Te pliki były już porównywane.
+  <a id="dupLink" href="#" style="color:var(--accent);font-weight:600;margin-left:6px">Otwórz istniejący wynik →</a>
+</div>
+
+<!-- UPLOAD -->
+<div class="upload-grid">
+  <div class="drop" id="za">
+    <input type="file" id="fa" accept=".pdf">
+    <div class="drop-icon">📄</div>
+    <div class="drop-label">Dokument A</div>
+    <div class="drop-sub">Przeciągnij PDF lub kliknij</div>
+    <div class="drop-name" id="na"></div>
+  </div>
+  <div class="drop" id="zb">
+    <input type="file" id="fb" accept=".pdf">
+    <div class="drop-icon">📄</div>
+    <div class="drop-label">Dokument B</div>
+    <div class="drop-sub">Przeciągnij PDF lub kliknij</div>
+    <div class="drop-name" id="nb"></div>
+  </div>
+</div>
+
+<div class="controls">
+  <label for="dtype">TYP DOKUMENTU</label>
+  <select id="dtype">
+    <option value="auto">🔍 Auto-detect</option>
+    <option value="faktura_vat">🧾 Faktura VAT</option>
+    <option value="wz">📦 WZ</option>
+    <option value="zamowienie">🛒 Zamówienie / PO</option>
+    <option value="list_przewozowy">🚚 List przewozowy / CMR</option>
+    <option value="inny">📋 Inny</option>
+  </select>
+  <label for="ocrEngine" title="Silnik OCR użyty do wyodrębnienia pozycji (test A/B)">SILNIK OCR</label>
+  <select id="ocrEngine" title="Kaskada = automatyczny dobór. Pozostałe wymuszają jeden silnik (do porównania jakości).">
+    <option value="cascade">⚙️ Kaskada (auto)</option>
+    <option value="glm">🧠 GLM-OCR</option>
+    <option value="mistral">🅼 Mistral OCR</option>
+    <option value="claude">🅰 Claude Vision</option>
+    <option value="camelot">📊 Camelot (tabele)</option>
+    <option value="img2table">🖼 img2table</option>
+    <option value="tesseract">🔤 Tesseract</option>
+  </select>
+  <button type="button" class="btn-run" id="btnRun" onclick="run()"><span id="btnRunSpinner" style="display:none">⏳ </span><span id="btnRunText">Analizuj →</span></button>
+</div>
+
+<div class="err-box" id="errBox"></div>
+<div class="loader" id="ldr">
+  <div class="spin"></div>
+  Analizuję dokumenty…
+</div>
+
+<!-- RESULTS -->
+<div class="results" id="res" aria-live="polite" aria-atomic="false">
+
+  <!-- SUMMARY -->
+  <div class="res-header" id="resHeader">
+    <div class="risk-dot" id="riskDot"></div>
+    <div class="res-summary">
+      <div id="resSummary"></div>
+      <div class="res-meta" id="resMeta"></div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num s-err" id="statErr">0</div>
+      <div class="stat-lbl">błędy</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num s-warn" id="statWarn">0</div>
+      <div class="stat-lbl">wątpliwe</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num s-fmt" id="statFmt">0</div>
+      <div class="stat-lbl">format</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num s-ok" id="statOk">0</div>
+      <div class="stat-lbl">zgodne</div>
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:var(--error)"></div>Rozbieżność krytyczna</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--warn)"></div>Wątpliwe / sprawdź</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#8b9cf8"></div>Różnica formatowania (ta sama wartość)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--ok)"></div>Zgodne</div>
+  </div>
+
+  <!-- ME22N PANEL -->
+  <div id="me22nPanel" style="display:none;margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">
+    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-family:var(--mono);margin-bottom:12px">📋 Dane do ME22N</div>
+    <div id="me22nGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px"></div>
+  </div>
+
+  <!-- FILTER BAR -->
+  <div class="filter-bar">
+    <span>POKAŻ:</span>
+    <button type="button" class="fbtn fbtn-all active" onclick="setFilter('all',this)">Wszystkie</button>
+    <button type="button" class="fbtn fbtn-err" onclick="setFilter('err',this)">Tylko błędy</button>
+    <button type="button" class="fbtn fbtn-warn" onclick="setFilter('warn',this)">Tylko wątpliwe</button>
+    <button type="button" class="fbtn fbtn-fmt" onclick="setFilter('fmt',this)">Tylko format</button>
+    <button type="button" class="fbtn fbtn-ok" onclick="setFilter('ok',this)">Tylko zgodne</button>
+  </div>
+
+  <!-- CATEGORY FILTER -->
+  <div class="cat-filter">
+    <span>KATEGORIA:</span>
+    <button type="button" class="cbtn active" onclick="setCat('all',this)">Wszystkie</button>
+    <button type="button" class="cbtn" onclick="setCat('identyfikator',this)">Identyfikatory</button>
+    <button type="button" class="cbtn" onclick="setCat('data',this)">Daty</button>
+    <button type="button" class="cbtn" onclick="setCat('kontrahent',this)">Kontrahenci</button>
+    <button type="button" class="cbtn" onclick="setCat('kwota',this)">Kwoty</button>
+    <button type="button" class="cbtn" onclick="setCat('platnosc',this)">Płatność</button>
+    <button type="button" class="cbtn" onclick="setCat('dostawa',this)">Dostawa</button>
+    <button type="button" class="cbtn" onclick="setCat('pozycja',this)">Pozycje</button>
+    <button type="button" class="cbtn" onclick="setCat('inne',this)">Inne</button>
+  </div>
+
+  <!-- FIELDS TABLE -->
+  <div class="sec-title">Pola dokumentu</div>
+  <div id="cardList" class="card-list"></div>
+  <table>
+    <thead><tr>
+      <th scope="col" style="width:20%">Pole</th>
+      <th scope="col" style="width:8%">Kategoria</th>
+      <th scope="col" style="width:22%">Dokument A</th>
+      <th scope="col" style="width:22%">Dokument B</th>
+      <th scope="col" style="width:9%">Status</th>
+      <th scope="col" style="width:6%">Sim.</th>
+      <th scope="col">Komentarz</th>
+    </tr></thead>
+    <tbody id="fBody"></tbody>
+  </table>
+
+  <!-- LINE ITEMS TABLE -->
+  <div id="itemsSec" style="display:none">
+    <div class="sec-title">Pozycje towarowe</div>
+    <table>
+      <thead><tr>
+        <th scope="col">Lp.</th>
+        <th scope="col">Nazwa</th>
+        <th scope="col">Ilość A</th><th scope="col">Ilość B</th>
+        <th scope="col">Cena A</th><th scope="col">Cena B</th>
+        <th scope="col">Wartość A</th><th scope="col">Wartość B</th>
+        <th scope="col">VAT A</th><th scope="col">VAT B</th>
+        <th scope="col">Status</th>
+        <th scope="col">Komentarz</th>
+      </tr></thead>
+      <tbody id="iBody"></tbody>
+    </table>
+  </div>
+
+  <!-- EXPORT BAR -->
+  <div id="exportBar" style="display:none;margin-top:20px;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 0;border-top:1px solid var(--border)">
+    <span style="font-size:12px;color:var(--muted);font-family:var(--mono)">POBIERZ:</span>
+    <a id="btnExpPdf" href="#" target="_blank"
+      style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:13px;font-weight:500;color:var(--text);transition:border-color .15s"
+      onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'" rel="noopener noreferrer">
+      📄 PDF
+    </a>
+    <a id="btnExpXlsx" href="#" target="_blank"
+      style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:13px;font-weight:500;color:var(--text);transition:border-color .15s"
+      onmouseover="this.style.borderColor='var(--ok)'" onmouseout="this.style.borderColor='var(--border)'" rel="noopener noreferrer">
+      📊 Excel
+    </a>
+    <span style="color:var(--border);margin:0 4px">|</span>
+    <span style="font-size:12px;color:var(--muted);font-family:var(--mono)">DECYZJA:</span>
+    <button type="button" id="btnApprove" onclick="approveCompare('approved')"
+      style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:rgba(5,150,105,.1);border:1px solid rgba(5,150,105,.3);border-radius:7px;font-size:13px;font-weight:600;color:var(--ok);cursor:pointer;transition:all .15s"
+      onmouseover="this.style.background='rgba(5,150,105,.2)'" onmouseout="this.style.background='rgba(5,150,105,.1)'">
+      ✓ Zatwierdź
+    </button>
+    <button type="button" id="btnReject" onclick="approveCompare('rejected')"
+      style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.25);border-radius:7px;font-size:13px;font-weight:600;color:var(--error);cursor:pointer;transition:all .15s"
+      onmouseover="this.style.background='rgba(220,38,38,.18)'" onmouseout="this.style.background='rgba(220,38,38,.08)'">
+      ✕ Odrzuć
+    </button>
+    <span id="approveStatus" style="font-size:12px;font-family:var(--mono)"></span>
+    {% if role == 'admin' %}
+    <button type="button" id="btnSaveTpl" onclick="saveTplModal()"
+      style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;transition:border-color .15s"
+      onmouseover="this.style.borderColor='#8b9cf8'" onmouseout="this.style.borderColor='var(--border)'">
+      💾 Zapisz jako szablon
+    </button>
+    {% endif %}
+  </div>
+
+</div><!-- /results -->
+
+<!-- SAVE AS TEMPLATE MODAL (admin only) -->
+{% if role == 'admin' %}
+<div id="tplModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;align-items:center;justify-content:center" role="dialog" aria-modal="true" aria-labelledby="tplModalTitle">
+  <div style="background:var(--surface);border-radius:12px;padding:24px;width:380px;max-width:92vw">
+    <div id="tplModalTitle" style="font-size:15px;font-weight:600;margin-bottom:16px">💾 Zapisz jako szablon</div>
+    <label for="tplName" style="font-size:12px;color:var(--muted);font-family:var(--mono)">NAZWA SZABLONU</label>
+    <input id="tplName" type="text" placeholder="np. SHIELDCO — PO vs PI" aria-required="true"
+      style="width:100%;margin-top:4px;margin-bottom:12px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px;outline:none">
+    <label for="tplDesc" style="font-size:12px;color:var(--muted);font-family:var(--mono)">OPIS (opcjonalnie)</label>
+    <input id="tplDesc" type="text" placeholder="Opcjonalny opis szablonu…"
+      style="width:100%;margin-top:4px;margin-bottom:12px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px;outline:none">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;cursor:pointer">
+      <input type="checkbox" id="tplPublic"> Publiczny (widoczny dla wszystkich)
+    </label>
+    <div id="tplError" style="display:none;color:#dc2626;font-size:12px;margin-bottom:8px;padding:6px 10px;background:#fef2f2;border-radius:5px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button type="button" onclick="document.getElementById('tplModal').style.display='none'"
+        style="padding:7px 16px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--muted);cursor:pointer">Anuluj</button>
+      <button type="button" onclick="saveTplConfirm()"
+        style="padding:7px 16px;background:var(--accent);border:none;border-radius:6px;color:#fff;font-weight:600;cursor:pointer">Zapisz</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script>
+// ─── drag & drop ────────────────────────────────────────────────────────────
+function setupDrop(zid,fid,nid){
+  const z=document.getElementById(zid),f=document.getElementById(fid),n=document.getElementById(nid);
+  f.addEventListener('change',()=>{if(f.files[0]){n.textContent='✓ '+f.files[0].name;z.classList.add('has')}});
+  z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('over')});
+  z.addEventListener('dragleave',()=>z.classList.remove('over'));
+  z.addEventListener('drop',e=>{
+    e.preventDefault();z.classList.remove('over');
+    const file=e.dataTransfer.files[0];
+    if(file&&file.name.endsWith('.pdf')){
+      const dt=new DataTransfer();dt.items.add(file);
+      f.files=dt.files;n.textContent='✓ '+file.name;z.classList.add('has');
+    }
+  });
+}
+setupDrop('za','fa','na');
+setupDrop('zb','fb','nb');
+
+// ─── AbortController for fetch cancellation (FIX 2) ─────────────────────────
+let _compareController = null;
+
+// ─── run ────────────────────────────────────────────────────────────────────
+async function run(){
+  const fa=document.getElementById('fa').files[0];
+  const fb=document.getElementById('fb').files[0];
+  if(!fa||!fb){showErr('Wybierz dwa pliki PDF.');return}
+  document.getElementById('errBox').classList.remove('on');
+  document.getElementById('res').classList.remove('on');
+  document.getElementById('ldr').classList.add('on');
+  document.getElementById('btnRun').disabled=true;
+  // FIX 3: show spinner in button
+  document.getElementById('btnRunSpinner').style.display='inline-block';
+  document.getElementById('btnRunText').textContent='Analizuję…';
+
+  // Abort any in-flight request before starting a new one (FIX 2)
+  if(_compareController) _compareController.abort();
+  _compareController = new AbortController();
+
+  const fd=new FormData();
+  fd.append('file_a',fa);fd.append('file_b',fb);
+  fd.append('doc_type',document.getElementById('dtype').value);
+  const _oe=document.getElementById('ocrEngine'); if(_oe) fd.append('ocr_engine',_oe.value);
+
+  try{
+    const r=await fetch('/api/compare',{method:'POST',body:fd,signal:_compareController.signal});
+    const d=await r.json();
+    if(!r.ok||d.error){showErr(d.error||'Błąd serwera');return}
+    if(d.duplicate){
+      const b=document.getElementById('dupBanner');
+      document.getElementById('dupLink').href='/history';
+      document.getElementById('dupLink').setAttribute('data-cid',d.existing_id);
+      b.style.display='block';
+      return;
+    }
+    render(d,fa.name,fb.name);
+  }catch(e){
+    if(e.name==='AbortError') return;  // cancelled — do not show error (FIX 2)
+    showErr('Błąd połączenia: '+e.message);
+  }
+  finally{
+    // FIX 3: always reset spinner/button, even on error
+    document.getElementById('ldr').classList.remove('on');
+    document.getElementById('btnRun').disabled=false;
+    document.getElementById('btnRunSpinner').style.display='none';
+    document.getElementById('btnRunText').textContent='Analizuj →';
+  }
+}
+
+// ─── templates ───────────────────────────────────────────────────────────────
+var _lastResult={};
+(async function loadTemplates(){
+  try{
+    const r=await fetch('/api/templates?page_type=compare');
+    if(!r.ok)return;
+    const list=await r.json();
+    const sel=document.getElementById('tplSel');
+    list.forEach(t=>{
+      const o=document.createElement('option');
+      o.value=t.id;
+      o.textContent=t.name+(t.is_public?' 🌐':'');
+      sel.appendChild(o);
+    });
+    sel._data=list;
+  }catch(e){}
+})();
+
+function applyTemplate(id){
+  if(!id)return;
+  const sel=document.getElementById('tplSel');
+  const list=sel._data||[];
+  const tpl=list.find(t=>String(t.id)===String(id));
+  if(!tpl)return;
+  // Apply doc_type
+  const dt=document.getElementById('dtype');
+  if(tpl.doc_type_a&&dt){
+    for(let o of dt.options){if(o.value===tpl.doc_type_a){dt.value=tpl.doc_type_a;break}}
+    try{localStorage.setItem('compare_settings',JSON.stringify({dtype:tpl.doc_type_a}));}catch(e){}
+  }
+  // Mark as applied
+  document.getElementById('tplApplied').style.display='inline';
+  // Track use
+  fetch('/api/templates/'+id+'/use',{method:'POST'}).catch(()=>{});
+}
+
+function saveTplModal(){
+  document.getElementById('tplModal').style.display='flex';
+  document.getElementById('tplName').value='';
+  document.getElementById('tplName').focus();
+}
+
+async function saveTplConfirm(){
+  const name=document.getElementById('tplName').value.trim();
+  if(!name)return;
+  const isPublic=document.getElementById('tplPublic').checked;
+  const dt=document.getElementById('dtype');
+  const body={
+    name,
+    description: document.getElementById('tplDesc').value.trim(),
+    page_type:'compare',
+    is_public: isPublic,
+    doc_type_a: dt?dt.value:'',
+    ai_model:'claude-sonnet-4-6',
+    use_ai:true
+  };
+  const errEl=document.getElementById('tplError');
+  errEl.style.display='none';
+  try{
+    const r=await fetch('/api/templates',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(r.ok){
+      document.getElementById('tplModal').style.display='none';
+      // Reload dropdown
+      const sel=document.getElementById('tplSel');
+      const o=document.createElement('option');
+      o.value=d.id;o.textContent=name+(isPublic?' 🌐':'');
+      sel.appendChild(o);
+    } else {
+      errEl.textContent=d.error||'Błąd zapisu szablonu ('+r.status+')';
+      errEl.style.display='';
+    }
+  }catch(e){
+    errEl.textContent='Błąd sieci: '+e.message;
+    errEl.style.display='';
+  }
+}
+
+function showErr(m){
+  document.getElementById('errBox').textContent='✕ '+m;
+  document.getElementById('errBox').classList.add('on');
+  document.getElementById('ldr').classList.remove('on');
+  document.getElementById('btnRun').disabled=false;
+  document.getElementById('btnRunSpinner').style.display='none';
+  document.getElementById('btnRunText').textContent='Analizuj →';
+}
+
+// ─── render ─────────────────────────────────────────────────────────────────
+function render(d,na,nb){
+  const risk=d.risk_level||'ok';
+  const dot=document.getElementById('riskDot');
+  dot.className='risk-dot '+
+    (risk==='blad'?'dot-err':risk==='ostrzezenie'?'dot-warn':risk==='format'?'dot-fmt':'dot-ok');
+
+  document.getElementById('resSummary').textContent=d.summary||'';
+  document.getElementById('resMeta').textContent=
+    `${d.doc_type_detected||''} · A: ${na} · B: ${nb} · #${d.comparison_id||'?'}`;
+
+  const se=document.getElementById('statErr');
+  const sw=document.getElementById('statWarn');
+  const sf=document.getElementById('statFmt');
+  const so=document.getElementById('statOk');
+  se.textContent=d.diff_count||0;
+  sw.textContent=d.warn_count||0;
+  sf.textContent=d.format_count||0;
+  so.textContent=d.ok_count||0;
+
+  // ── Fields ──────────────────────────────────────────────────────────────
+  const fb=document.getElementById('fBody');fb.innerHTML='';
+  (d.fields||[]).forEach(f=>{
+    const tr=document.createElement('tr');
+    tr.className='row-'+f.status;
+    tr.dataset.status=f.status;
+    tr.dataset.cat=f.category||'inne';
+
+    const vcls=statusValClass(f.status);
+    const aVal=f.doc_a?`<span class="${vcls}">${esc(f.doc_a)}</span>`:`<span class="v-null">—</span>`;
+    const bVal=f.doc_b?`<span class="${vcls}">${esc(f.doc_b)}</span>`:`<span class="v-null">—</span>`;
+    const cmtCls=f.status==='format'?'cmt cmt-fmt':f.status==='watpliwe'?'cmt cmt-warn':'cmt';
+
+    tr.innerHTML=`
+      <td><strong>${esc(f.field)}</strong></td>
+      <td><span class="cat-badge">${esc(f.category||'')}</span></td>
+      <td>${aVal}</td>
+      <td>${bVal}</td>
+      <td>${pillHtml(f.status)}</td>
+      <td>${simBar(f.similarity)}</td>
+      <td><div class="${cmtCls}">${esc(f.comment||'')}</div></td>`;
+    fb.appendChild(tr);
+  });
+
+  // ── Mobile cards ─────────────────────────────────────────────────────────
+  renderCards(d.fields||[]);
+
+  // ── ME22N panel ─────────────────────────────────────────────────────────
+  renderMe22n(d.me22n_panel);
+
+  // ── Line items ───────────────────────────────────────────────────────────
+  const items=d.line_items||[];
+  if(items.length){
+    const ib=document.getElementById('iBody');ib.innerHTML='';
+    items.forEach(it=>{
+      const ok=it.status==='ok';
+      const fmt=it.status==='format';
+      const vcls=statusValClass(it.status);
+      const tr=document.createElement('tr');
+      tr.className='row-'+it.status;
+      tr.dataset.status=it.status;
+      tr.dataset.cat='pozycja';
+      tr.innerHTML=`
+        <td>${it.lp}</td>
+        <td><strong>${esc(it.name)}</strong></td>
+        <td class="${ok||fmt?'':'v-err'}">${esc(it.qty_a)||'<span class="v-null">—</span>'}</td>
+        <td class="${ok||fmt?'':'v-err'}">${esc(it.qty_b)||'<span class="v-null">—</span>'}</td>
+        <td class="${ok||fmt?'':'v-err'}">${esc(it.price_a)||'<span class="v-null">—</span>'}</td>
+        <td class="${ok||fmt?'':'v-err'}">${esc(it.price_b)||'<span class="v-null">—</span>'}</td>
+        <td class="${ok||fmt?'':'v-err'}">${esc(it.value_a)||'<span class="v-null">—</span>'}</td>
+        <td class="${ok||fmt?'':'v-err'}">${esc(it.value_b)||'<span class="v-null">—</span>'}</td>
+        <td>${esc(it.vat_a)||'<span class="v-null">—</span>'}</td>
+        <td>${esc(it.vat_b)||'<span class="v-null">—</span>'}</td>
+        <td>${pillHtml(it.status)}</td>
+        <td><div class="cmt">${esc(it.comment||'')}</div></td>`;
+      ib.appendChild(tr);
+    });
+    document.getElementById('itemsSec').style.display='block';
+  } else {
+    document.getElementById('itemsSec').style.display='none';
+  }
+
+  // reset filters
+  currentFilter='all';currentCat='all';
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.fbtn-all').classList.add('active');
+  document.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.cbtn')[0].classList.add('active');
+
+  document.getElementById('res').classList.add('on');
+  document.getElementById('res').scrollIntoView({behavior:'smooth',block:'start'});
+
+  // Export bar
+  if(d.comparison_id){
+    const bar=document.getElementById('exportBar');
+    document.getElementById('btnExpPdf').href='/api/export/pdf/'+d.comparison_id;
+    document.getElementById('btnExpXlsx').href='/api/export/excel/'+d.comparison_id;
+    bar.style.display='flex';
+    _lastResult={comparison_id:d.comparison_id,doc_type:d.doc_type_detected||''};
+  }
+
+  // Dynamic page title
+  const dtype=d.doc_type_detected||document.getElementById('dtype').value||'';
+  if(dtype&&dtype!=='auto') document.title=`Wyniki: ${dtype} — DocCompare`;
+}
+
+// ─── auto-remember settings ──────────────────────────────────────────────────
+(function restoreSettings(){
+  try{
+    const s=JSON.parse(localStorage.getItem('compare_settings')||'{}');
+    if(s.dtype){const el=document.getElementById('dtype');if(el)el.value=s.dtype;}
+  }catch(e){}
+})();
+document.getElementById('dtype')?.addEventListener('change',function(){
+  try{localStorage.setItem('compare_settings',JSON.stringify({dtype:this.value}));}catch(e){}
+});
+
+// ─── filtering ───────────────────────────────────────────────────────────────
+let currentFilter='all', currentCat='all';
+
+function setFilter(f,btn){
+  currentFilter=f;
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+function setCat(c,btn){
+  currentCat=c;
+  document.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+
+function applyFilters(){
+  document.querySelectorAll('#fBody tr, #iBody tr').forEach(tr=>{
+    const s=tr.dataset.status||'';
+    const c=tr.dataset.cat||'';
+    let showStatus=true, showCat=true;
+
+    if(currentFilter==='err') showStatus=['roznica','brak_w_a','brak_w_b'].includes(s);
+    else if(currentFilter==='warn') showStatus=s==='watpliwe';
+    else if(currentFilter==='fmt') showStatus=s==='format';
+    else if(currentFilter==='ok') showStatus=s==='ok';
+
+    if(currentCat!=='all') showCat=c===currentCat;
+
+    tr.classList.toggle('hidden-row', !(showStatus&&showCat));
+  });
+}
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+function statusValClass(s){
+  if(s==='roznica'||s==='brak_w_a'||s==='brak_w_b') return 'v-err';
+  if(s==='watpliwe') return 'v-warn';
+  if(s==='format') return 'v-fmt';
+  return 'v-ok';
+}
+
+function pillHtml(s){
+  const map={
+    ok:      ['OK','p-ok'],
+    format:  ['format','p-fmt'],
+    watpliwe:['wątpliwe','p-warn'],
+    roznica: ['różnica','p-err'],
+    brak_w_a:['brak w A','p-err'],
+    brak_w_b:['brak w B','p-err'],
+  };
+  const [label,cls]=map[s]||[s,'p-info'];
+  return `<span class="pill ${cls}">${label}</span>`;
+}
+
+function simBar(sim){
+  if(sim==null||sim===undefined) return '';
+  const pct=Math.max(0,Math.min(100,sim));
+  const col=pct>=95?'var(--ok)':pct>=75?'var(--warn)':'var(--error)';
+  return `<div class="sim-bar">
+    <span class="sim-track"><span class="sim-fill" style="width:${pct}%;background:${col}"></span></span>
+    ${pct}%</div>`;
+}
+
+function esc(s){
+  if(s==null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── ME22N panel ─────────────────────────────────────────────────────────────
+function renderMe22n(panel){
+  const container=document.getElementById('me22nPanel');
+  const grid=document.getElementById('me22nGrid');
+  if(!panel||Object.keys(panel).length===0){
+    container.style.display='none';
+    return;
+  }
+  grid.innerHTML='';
+  Object.entries(panel).forEach(([key,info])=>{
+    const isRoznica=info.status==='roznica';
+    const valA=info.val_a||'—';
+    const valB=info.val_b||'';
+    const card=document.createElement('div');
+    card.style.cssText='background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;position:relative';
+    if(isRoznica) card.style.borderColor='var(--warn)';
+    let valHtml;
+    if(isRoznica&&valB){
+      valHtml=`<div style="font-size:13px;font-weight:600;color:var(--warn)">${esc(valA)}</div>`
+        +`<div style="font-size:11px;color:var(--muted);margin-top:2px">B: ${esc(valB)}</div>`;
+    } else {
+      valHtml=`<div style="font-size:13px;font-weight:600;color:var(--text)">${esc(valA)}</div>`;
+    }
+    card.innerHTML=`
+      <div style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">${esc(key)}</div>
+      ${valHtml}
+      <button type="button" onclick="copyMe22n(this,'${esc(valA).replace(/'/g,"&#39;")}')"
+        title="Kopiuj" aria-label="Kopiuj wartość ${esc(key)} do schowka"
+        style="position:absolute;top:8px;right:8px;background:none;border:none;cursor:pointer;font-size:14px;color:var(--muted);padding:2px 4px;border-radius:4px;transition:color .15s"
+        onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">⎘</button>`;
+    grid.appendChild(card);
+  });
+  container.style.display='block';
+}
+
+function copyMe22n(btn, text){
+  if(!text||text==='—') return;
+  navigator.clipboard.writeText(text).then(()=>{
+    const orig=btn.textContent;
+    btn.textContent='✓';
+    btn.style.color='var(--ok)';
+    setTimeout(()=>{btn.textContent=orig;btn.style.color='var(--muted)';},1200);
+  }).catch(()=>{});
+}
+
+// ─── mobile card rendering ────────────────────────────────────────────────────
+function renderCards(findings){
+  const list=document.getElementById('cardList');
+  if(!list) return;
+  list.innerHTML='';
+  const statusCls={roznica:'fc-err',brak_w_a:'fc-err',brak_w_b:'fc-err',watpliwe:'fc-warn',format:'fc-fmt',ok:'fc-ok'};
+  findings.forEach(f=>{
+    const div=document.createElement('div');
+    div.className='finding-card '+(statusCls[f.status]||'');
+    div.dataset.status=f.status;
+    div.dataset.cat=f.category||'inne';
+    const aVal=f.doc_a||'—', bVal=f.doc_b||'—';
+    div.innerHTML=`
+      <div class="fc-head">
+        <span class="fc-field">${esc(f.field)}</span>
+        ${pillHtml(f.status)}
+      </div>
+      <div class="fc-row"><span class="fc-label">A:</span><span class="fc-val ${f.status!=='ok'&&f.status!=='format'?'v-err':''}">${esc(aVal)}</span></div>
+      <div class="fc-row"><span class="fc-label">B:</span><span class="fc-val ${f.status!=='ok'&&f.status!=='format'?'v-err':''}">${esc(bVal)}</span></div>
+      ${f.comment?`<div class="fc-comment">${esc(f.comment)}</div>`:''}`;
+    list.appendChild(div);
+  });
+}
+
+// ─── approval ─────────────────────────────────────────────────────────────────
+async function approveCompare(verdict){
+  const cid=_lastResult.comparison_id;
+  if(!cid) return;
+  const btnA=document.getElementById('btnApprove');
+  const btnR=document.getElementById('btnReject');
+  const st=document.getElementById('approveStatus');
+  if(btnA) btnA.disabled=true;
+  if(btnR) btnR.disabled=true;
+  try{
+    const r=await fetch('/api/comparison/'+cid+'/approve',{
+      method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrf()},
+      body:JSON.stringify({status:verdict})
+    });
+    const d=await r.json();
+    if(r.ok){
+      if(st){
+        st.textContent=verdict==='approved'?'✓ Zatwierdzone':'✕ Odrzucone';
+        st.style.color=verdict==='approved'?'var(--ok)':'var(--error)';
+      }
+      if(btnA) btnA.style.display='none';
+      if(btnR) btnR.style.display='none';
+    }else{
+      if(st){st.textContent='Błąd: '+(d.error||'nieznany');st.style.color='var(--error)';}
+      if(btnA) btnA.disabled=false;
+      if(btnR) btnR.disabled=false;
+    }
+  }catch(e){
+    if(st){st.textContent='Błąd połączenia';st.style.color='var(--error)';}
+    if(btnA) btnA.disabled=false;
+    if(btnR) btnR.disabled=false;
+  }
+}
+</script>
+{% endblock %}

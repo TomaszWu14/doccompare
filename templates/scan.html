@@ -1,0 +1,427 @@
+{% extends "base.html" %}
+{% block title %}Skany dostaw — ekstrakcja danych{% endblock %}
+{% block extra_head %}
+<style>
+:root{
+  --accent:#4f6ef7; --ok:#16a34a; --warn:#d97706; --err:#dc2626;
+  --bg:#f8fafc; --card:#fff; --border:#e2e8f0; --muted:#6b7280;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);font-family:Arial,Helvetica,sans-serif;font-size:13.5px;color:#1e293b}
+
+/* ── LAYOUT ── */
+.scan-wrap{max-width:1500px;margin:0 auto;padding:20px 24px 60px}
+.page-hdr{display:flex;align-items:center;gap:14px;margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--accent)}
+.page-hdr h1{font-size:20px;font-weight:700;color:#1e293b}
+.page-hdr .badge{background:#f0f4ff;color:var(--accent);border:1px solid #c7d7fe;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600}
+
+/* ── STEPS ── */
+.step{display:none}
+.step.active{display:block}
+
+/* ── DROPZONE ── */
+.dropzone{
+  border:2.5px dashed #c7d7fe;border-radius:14px;background:#f5f8ff;
+  padding:48px 24px;text-align:center;cursor:pointer;transition:all .2s;
+  position:relative;
+}
+.dropzone:hover,.dropzone.dragover{border-color:var(--accent);background:#eef2ff}
+.dropzone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.dropzone .dz-icon{font-size:48px;margin-bottom:10px}
+.dropzone .dz-title{font-size:16px;font-weight:700;color:#1e293b;margin-bottom:6px}
+.dropzone .dz-sub{font-size:13px;color:var(--muted)}
+.file-list{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+.file-chip{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--border);
+           border-radius:8px;padding:5px 10px;font-size:12px}
+.file-chip .fc-rm{color:#9ca3af;cursor:pointer;font-size:14px;line-height:1}
+.file-chip .fc-rm:hover{color:var(--err)}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 20px;border-radius:8px;
+     font-size:13.5px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#3b5bdb}
+.btn-primary:disabled{background:#94a3b8;cursor:not-allowed}
+.btn-ghost{background:#fff;border:1.5px solid var(--border);color:#374151}
+.btn-ghost:hover{background:#f8fafc}
+.btn-green{background:#16a34a;color:#fff}
+.btn-green:hover{background:#15803d}
+
+/* ── PROGRESS ── */
+.prog-wrap{background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px}
+.prog-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.prog-bar-bg{height:10px;background:#e2e8f0;border-radius:5px;overflow:hidden}
+.prog-bar-fg{height:100%;background:var(--accent);border-radius:5px;transition:width .3s}
+.prog-log{margin-top:14px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:5px}
+.prog-row{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;font-size:12px;background:#f8fafc;border:1px solid var(--border)}
+.prog-row.ok{border-color:#bbf7d0;background:#f0fdf4}
+.prog-row.err{border-color:#fecaca;background:#fef2f2}
+.prog-row.running{border-color:#c7d7fe;background:#eef2ff}
+
+/* ── TABLE ── */
+.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border);background:#fff}
+table.scan-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.scan-tbl th{
+  background:#1f4e79;color:#fff;padding:8px 10px;text-align:left;
+  white-space:nowrap;font-size:11.5px;font-weight:600;position:sticky;top:0;z-index:2
+}
+.scan-tbl td{
+  padding:5px 8px;border-bottom:1px solid var(--border);vertical-align:middle;
+  max-width:220px;
+}
+.scan-tbl tr:hover td{background:#f0f4ff}
+.scan-tbl tr.err-row td{background:#fff5f5}
+.scan-tbl td[contenteditable=true]{
+  cursor:text;outline:none;border-radius:3px;min-width:40px;
+}
+.scan-tbl td[contenteditable=true]:focus{background:#fffbeb;box-shadow:0 0 0 2px #f59e0b}
+.scan-tbl .col-file{color:var(--muted);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scan-tbl .col-lot{font-family:monospace;font-weight:600;color:#7c3aed}
+.scan-tbl .col-num{text-align:right;font-variant-numeric:tabular-nums}
+.scan-tbl .col-rozb{text-align:right;font-weight:700}
+.col-rozb.neg{color:var(--err)}
+.col-rozb.pos{color:var(--ok)}
+.row-del{color:#9ca3af;cursor:pointer;font-size:15px;line-height:1;padding:0 4px}
+.row-del:hover{color:var(--err)}
+
+/* ── KPI ── */
+.kpi-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:110px;text-align:center}
+.kpi .kn{font-size:22px;font-weight:700}
+.kpi .kl{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* ── TOOLBAR ── */
+.tbl-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.search-box{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:220px}
+.search-box:focus{outline:none;border-color:var(--accent)}
+</style>
+{% endblock %}
+{% block page_title %}PDF → Excel{% endblock %}
+
+{% block content %}
+<div class="scan-wrap">
+  <!-- Header -->
+  <div class="page-hdr">
+    <span style="font-size:28px" aria-hidden="true">📦</span>
+    <h1>PDF → Excel</h1>
+    <span class="badge">Moduł 3 · AI OCR</span>
+    <span style="margin-left:auto;color:var(--muted);font-size:12px">
+      Wgraj PDF / JPG / PNG → AI wyciąga dane → eksport do Excel / SAP
+    </span>
+  </div>
+
+  <!-- ═══ KROK 1: UPLOAD ═══════════════════════════════════════════════════ -->
+  <div class="step active" id="stepUpload">
+    <div class="dropzone" id="dropZone" role="button" tabindex="0" aria-label="Wgraj skany dokumentów — kliknij lub przeciągnij pliki PDF, JPG, PNG">
+      <input type="file" id="fileInput" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif" aria-label="Wybierz pliki do ekstrakcji">
+      <div class="dz-icon" aria-hidden="true">🗂️</div>
+      <div class="dz-title">Wgraj skany dokumentów dostaw</div>
+      <div class="dz-sub">PDF, JPG, PNG, TIFF · przeciągnij lub kliknij · wiele plików naraz</div>
+    </div>
+    <div class="file-list" id="fileList"></div>
+
+    <div style="margin-top:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <button type="button" class="btn btn-primary" id="btnExtract" onclick="startExtract()" disabled>
+        🔍 Wyciągnij dane (AI)
+      </button>
+      <span style="color:var(--muted);font-size:12.5px">
+        AI przeanalizuje każdy plik/stronę osobno i wyciągnie dane dostawy
+      </span>
+    </div>
+
+    <!-- Info box -->
+    <div style="margin-top:24px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px 18px;font-size:12.5px;color:#0c4a6e">
+      <strong>Co AI wyciąga:</strong> typ dokumentu · numer dokumentu · dostawca · data ·
+      REF/indeks SAP · LOT/partia · ilość z dokumentu · ilość odebrana (z adnotacji ręcznych) ·
+      rozbieżności · uwagi magazynu
+    </div>
+  </div>
+
+  <!-- ═══ KROK 2: PRZETWARZANIE ════════════════════════════════════════════ -->
+  <div class="step" id="stepProgress">
+    <div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:8px;padding:12px 18px;
+                margin-bottom:16px;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#92400e">
+      <span style="font-size:20px" aria-hidden="true">⚠️</span>
+      Ekstrakcja w toku — nie zamykaj zakładki.
+    </div>
+    <div class="prog-wrap">
+      <div class="prog-hdr">
+        <strong id="progLabel">Przygotowanie...</strong>
+        <span id="progPct" style="color:var(--accent);font-weight:700">0%</span>
+      </div>
+      <div class="prog-bar-bg">
+        <div class="prog-bar-fg" id="progBar" style="width:0%"
+             role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
+             aria-label="Postęp ekstrakcji"></div>
+      </div>
+      <div class="prog-log" id="progLog" aria-live="polite" aria-atomic="false"></div>
+    </div>
+  </div>
+
+  <!-- ═══ KROK 3: WYNIKI ════════════════════════════════════════════════════ -->
+  <div class="step" id="stepResults">
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <div class="tbl-toolbar">
+      <input type="text" class="search-box" id="searchBox" placeholder="🔍 Szukaj (REF, LOT, dostawca...)" oninput="filterTable()">
+      <button type="button" class="btn btn-ghost" onclick="addRow()">+ Dodaj wiersz</button>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button type="button" class="btn btn-ghost" onclick="goBack()">← Nowe skany</button>
+        <button type="button" class="btn btn-green" onclick="exportExcel()">📊 Eksport do Excel (SAP)</button>
+      </div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table class="scan-tbl" id="scanTable">
+        <thead>
+          <tr>
+            <th scope="col" style="width:26px"></th>
+            <th scope="col">Plik</th><th scope="col">Str.</th><th scope="col">Typ dok.</th><th scope="col">Nr dokumentu</th>
+            <th scope="col">Dostawca</th><th scope="col">Data</th><th scope="col">REF / Indeks SAP</th>
+            <th scope="col">Opis produktu</th><th scope="col">LOT / Partia</th><th scope="col">J.m.</th>
+            <th scope="col">Ilość na dok.</th><th scope="col">Ilość odebrana</th><th scope="col">Rozbieżność</th>
+            <th scope="col">Uwagi</th>
+          </tr>
+        </thead>
+        <tbody id="scanTbody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;font-size:11.5px;color:var(--muted)">
+      Kliknij dowolną komórkę aby edytować. Zmiany są widoczne od razu w eksporcie Excel.
+    </div>
+  </div>
+</div>
+
+<script>
+var _files=[], _rows=[], _jobId=null;
+
+// ─── Dropzone ────────────────────────────────────────────────────────────────
+(function(){
+  var dz=document.getElementById('dropZone');
+  var inp=document.getElementById('fileInput');
+  dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('dragover');});
+  dz.addEventListener('dragleave',function(){dz.classList.remove('dragover');});
+  dz.addEventListener('drop',function(e){
+    e.preventDefault();dz.classList.remove('dragover');
+    addFiles(Array.from(e.dataTransfer.files));
+  });
+  dz.addEventListener('click',function(e){if(e.target===inp)return;inp.click();});
+  inp.addEventListener('change',function(){addFiles(Array.from(this.files));this.value='';});
+})();
+
+var ALLOWED_EXT=['.pdf','.jpg','.jpeg','.png','.tiff','.tif'];
+function addFiles(files){
+  files.forEach(function(f){
+    var ext=f.name.toLowerCase().match(/\.[^.]+$/);
+    if(!ext||!ALLOWED_EXT.includes(ext[0])) return;
+    if(!_files.find(function(x){return x.name===f.name;})) _files.push(f);
+  });
+  renderFileList();
+  document.getElementById('btnExtract').disabled=!_files.length;
+}
+function removeFile(name){
+  _files=_files.filter(function(f){return f.name!==name;});
+  renderFileList();
+  document.getElementById('btnExtract').disabled=!_files.length;
+}
+function renderFileList(){
+  document.getElementById('fileList').innerHTML=_files.map(function(f){
+    var ext=f.name.toLowerCase().endsWith('.pdf')?'📄':'🖼️';
+    return '<div class="file-chip">'+ext+' <span>'+esc(f.name)+'</span>'
+      +'<span class="fc-rm" onclick="removeFile('+esc(JSON.stringify(f.name))+')">×</span></div>';
+  }).join('');
+}
+
+// ─── Extraction ───────────────────────────────────────────────────────────────
+window.addEventListener('beforeunload',function(e){
+  if(document.getElementById('stepProgress').classList.contains('active')){
+    e.preventDefault();e.returnValue='Ekstrakcja w toku — na pewno wyjść?';
+  }
+});
+
+async function startExtract(){
+  if(!_files.length) return;
+  _rows=[];
+  switchStep('progress');
+  document.getElementById('progLog').innerHTML='';
+
+  var total=_files.length;
+  var done=0;
+
+  for(var i=0;i<_files.length;i++){
+    var f=_files[i];
+    logRow(f.name,'running','⏳ Przetwarzanie...');
+    var fd=new FormData();
+    fd.append('file',f);
+    try{
+      var res=await fetch('/api/scan/extract',{method:'POST',body:fd});
+      var d=await res.json();
+      if(d.error){
+        logRow(f.name,'err','💥 '+d.error,true);
+        _rows.push({plik:f.name,strona:'',typ_dok:'',nr_dok:'',dostawca:'',data:'',
+                    ref:'',opis:'',lot:'',jm:'',ilosc_zam:'',ilosc_dost:'',rozbiez:'',
+                    uwagi:'BŁĄD: '+d.error});
+      }else{
+        var nPos=d.rows?d.rows.length:0;
+        logRow(f.name,'ok','✅ Wyciągnięto '+nPos+' pozycji',true);
+        (d.rows||[]).forEach(function(r){_rows.push(r);});
+      }
+    }catch(e){
+      logRow(f.name,'err','💥 Błąd połączenia: '+e.message,true);
+    }
+    done++;
+    var pct=Math.round(done/total*100);
+    var progBar=document.getElementById('progBar');
+    progBar.style.width=pct+'%';
+    progBar.setAttribute('aria-valuenow',pct);
+    document.getElementById('progPct').textContent=pct+'%';
+    document.getElementById('progLabel').textContent=done+' / '+total+' plików';
+  }
+
+  renderResults();
+  switchStep('results');
+}
+
+function logRow(name,cls,msg,replace){
+  var log=document.getElementById('progLog');
+  var id='log_'+btoa(name).replace(/[^a-z0-9]/gi,'').slice(0,12);
+  var existing=document.getElementById(id);
+  var html='<div class="prog-row '+cls+'" id="'+id+'">'+
+    '<span>'+esc(name.length>40?name.slice(0,38)+'…':name)+'</span>'+
+    '<span style="margin-left:auto;color:#555">'+esc(msg)+'</span></div>';
+  if(existing&&replace) existing.outerHTML=html;
+  else log.insertAdjacentHTML('beforeend',html);
+  log.scrollTop=log.scrollHeight;
+}
+
+// ─── Table ────────────────────────────────────────────────────────────────────
+var COLS=['plik','strona','typ_dok','nr_dok','dostawca','data','ref','opis',
+          'lot','jm','ilosc_zam','ilosc_dost','rozbiez','uwagi'];
+
+function renderResults(){
+  // KPI
+  var nFiles=[...new Set(_rows.map(function(r){return r.plik;}))].length;
+  var nPos=_rows.filter(function(r){return !(r.uwagi||'').startsWith('BŁĄD');}).length;
+  var nLot=_rows.filter(function(r){return r.lot;}).length;
+  var nRozb=_rows.filter(function(r){return r.rozbiez&&r.rozbiez!='';}).length;
+  document.getElementById('kpiRow').innerHTML=[
+    ['📄',nFiles,'Pliki'],['📋',nPos,'Pozycje'],['🏷️',nLot,'Z LOT'],['⚠️',nRozb,'Rozbieżności']
+  ].map(function(x){
+    return '<div class="kpi"><div class="kn" style="font-size:22px">'+x[1]+'</div>'
+      +'<div class="kl">'+x[0]+' '+x[2]+'</div></div>';
+  }).join('');
+
+  renderTable(_rows);
+}
+
+function renderTable(rows){
+  document.getElementById('scanTbody').innerHTML=rows.map(function(r,i){
+    var isErr=r.uwagi&&r.uwagi.startsWith('BŁĄD');
+    var rCls=isErr?'err-row':'';
+    var rozb=parseFloat(String(r.rozbiez).replace(',','.'));
+    var rozbCls=isNaN(rozb)?'':(rozb<0?' neg':rozb>0?' pos':'');
+    var masterIdx=_rows.indexOf(r);
+    var idx=masterIdx>=0?masterIdx:i;
+
+    return '<tr class="'+rCls+'" data-idx="'+idx+'">'
+      +'<td><span class="row-del" onclick="deleteRow('+idx+')">✕</span></td>'
+      +editCell(r,'plik',idx,'col-file')
+      +editCell(r,'strona',idx,'col-num',true)
+      +editCell(r,'typ_dok',idx)
+      +editCell(r,'nr_dok',idx)
+      +editCell(r,'dostawca',idx)
+      +editCell(r,'data',idx)
+      +editCell(r,'ref',idx)
+      +editCell(r,'opis',idx)
+      +'<td class="col-lot" contenteditable="true" data-key="lot" data-idx="'+idx+'" onblur="cellEdit(this)">'+esc(r.lot||'')+'</td>'
+      +editCell(r,'jm',idx,'col-num',true)
+      +editCell(r,'ilosc_zam',idx,'col-num')
+      +editCell(r,'ilosc_dost',idx,'col-num')
+      +'<td class="col-rozb'+rozbCls+'" contenteditable="true" data-key="rozbiez" data-idx="'+idx+'" onblur="cellEdit(this)">'+esc(r.rozbiez||'')+'</td>'
+      +editCell(r,'uwagi',idx)
+      +'</tr>';
+  }).join('');
+}
+
+function editCell(r,key,idx,cls,noEdit){
+  var v=esc(r[key]||'');
+  var ce=noEdit?'':'contenteditable="true" onblur="cellEdit(this)"';
+  var d='data-key="'+key+'" data-idx="'+idx+'"';
+  return '<td class="'+(cls||'')+'" '+ce+' '+d+'>'+v+'</td>';
+}
+
+function cellEdit(td){
+  var idx=parseInt(td.dataset.idx);
+  var key=td.dataset.key;
+  if(idx>=0&&key) _rows[idx][key]=td.innerText.trim();
+}
+
+function deleteRow(idx){
+  _rows.splice(idx,1);
+  renderTable(_rows);
+  // Update KPI
+  var nPos=_rows.filter(function(r){return !(r.uwagi||'').startsWith('BŁĄD');}).length;
+  var nLot=_rows.filter(function(r){return r.lot;}).length;
+  var nRozb=_rows.filter(function(r){return r.rozbiez&&r.rozbiez!='';}).length;
+}
+
+function addRow(){
+  _rows.push({plik:'',strona:'',typ_dok:'',nr_dok:'',dostawca:'',data:'',
+              ref:'',opis:'',lot:'',jm:'szt',ilosc_zam:'',ilosc_dost:'',rozbiez:'',uwagi:''});
+  renderTable(_rows);
+  // Scroll to bottom
+  var tb=document.getElementById('scanTbody');
+  tb.lastElementChild&&tb.lastElementChild.scrollIntoView({behavior:'smooth'});
+}
+
+function filterTable(){
+  var q=document.getElementById('searchBox').value.toLowerCase();
+  if(!q){renderTable(_rows);return;}
+  var filtered=_rows.filter(function(r){
+    return COLS.some(function(k){return String(r[k]||'').toLowerCase().includes(q);});
+  });
+  renderTable(filtered);
+}
+
+// ─── Excel export ─────────────────────────────────────────────────────────────
+async function exportExcel(){
+  var btn=document.querySelector('.btn-green');
+  btn.disabled=true;btn.textContent='⏳ Generowanie...';
+  try{
+    var res=await fetch('/api/scan/export',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({rows:_rows})
+    });
+    if(!res.ok){toast('Błąd eksportu: '+res.status,'error');return;}
+    var blob=await res.blob();
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;
+    a.download='dane_dostaw_'+(new Date().toISOString().slice(0,10))+'.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){toast('Błąd: '+e.message,'error');}finally{
+    btn.disabled=false;btn.textContent='📊 Eksport do Excel (SAP)';
+  }
+}
+
+function goBack(){
+  _files=[];_rows=[];
+  document.getElementById('fileList').innerHTML='';
+  document.getElementById('btnExtract').disabled=true;
+  switchStep('upload');
+}
+
+// ─── Utils ────────────────────────────────────────────────────────────────────
+function switchStep(s){
+  ['upload','progress','results'].forEach(function(x){
+    var el=document.getElementById('step'+x.charAt(0).toUpperCase()+x.slice(1));
+    if(el) el.className='step'+(s===x?' active':'');
+  });
+}
+function esc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+{% endblock %}

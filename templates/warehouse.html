@@ -1,0 +1,535 @@
+{% extends "base.html" %}
+{% block title %}Magazyn — Rejestr przyjęć{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── PAGE HEADER ──────────────────────────────────────────────────────────── */
+
+/* ── STATS ────────────────────────────────────────────────────────────────── */
+.wh-stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.wh-stat {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 20px; min-width: 110px; text-align: center;
+}
+.wh-stat-val { font-size: 22px; font-weight: 800; color: var(--text); font-family: var(--mono); }
+.wh-stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; font-weight: 600;
+               text-transform: uppercase; letter-spacing: .4px; }
+.wh-stat.orange .wh-stat-val { color: var(--warn); }
+.wh-stat.yellow .wh-stat-val { color: #d97706; }
+.wh-stat.green  .wh-stat-val { color: var(--ok); }
+.wh-stat.blue   .wh-stat-val { color: var(--accent); }
+
+/* ── BUTTONS ──────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); transition: all .12s; white-space: nowrap; text-decoration: none;
+}
+.btn:hover { border-color: var(--muted); }
+.btn-primary  { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover  { opacity: .88; }
+.btn-sm { padding: 5px 11px; font-size: 12px; }
+.btn-icon { padding: 5px 8px; font-size: 13px; }
+.btn-danger { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.btn-danger:hover { background: #fca5a5; }
+[data-theme="dark"] .btn-danger { background: #2d0a0a; color: #f87171; border-color: #7f1d1d; }
+
+/* ── TABLE ────────────────────────────────────────────────────────────────── */
+.wh-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.wh-table-wrap { overflow-x: auto; }
+table.wh-table { width: 100%; border-collapse: collapse; }
+table.wh-table th {
+  background: var(--surface2); color: var(--muted);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+table.wh-table td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  font-size: 13px; color: var(--text); vertical-align: middle;
+}
+table.wh-table tr:last-child td { border-bottom: none; }
+table.wh-table tr:hover td { background: var(--surface2); }
+.empty-state-row td { text-align: center; padding: 42px 20px; color: var(--muted); }
+.mono { font-family: var(--mono); font-size: 12px; }
+.truncate-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── STATUS BADGES ────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.badge-przybyle        { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.badge-sprawdzone      { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+.badge-do_sap          { background: #fed7aa; color: #9a3412; border: 1px solid #fb923c; }
+.badge-wprowadzone_sap { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+[data-theme="dark"] .badge-przybyle        { background: #451a03; color: #fbbf24; border-color: #78350f; }
+[data-theme="dark"] .badge-sprawdzone      { background: #0c1a40; color: #7eb8ff; border-color: #1d4ed8; }
+[data-theme="dark"] .badge-do_sap          { background: #431407; color: #fb923c; border-color: #c2410c; }
+[data-theme="dark"] .badge-wprowadzone_sap { background: #052e16; color: #4ade80; border-color: #166534; }
+
+/* ── QUICK STATUS BUTTONS ──────────────────────────────────────────────────── */
+.qs-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); background: var(--surface2);
+  color: var(--muted); transition: all .12s; white-space: nowrap;
+}
+.qs-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.qs-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── MODAL ────────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.5); z-index: 1000;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 28px; width: 540px; max-width: 95vw;
+  max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+.modal-title {
+  font-size: 16px; font-weight: 800; color: var(--text);
+  margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+}
+.form-row { margin-bottom: 14px; }
+.form-row label {
+  display: block; font-size: 12px; font-weight: 600; color: var(--muted);
+  margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px;
+}
+.form-row input,
+.form-row select,
+.form-row textarea {
+  width: 100%; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-size: 13px; font-family: inherit;
+  transition: border-color .15s;
+}
+.form-row input:focus,
+.form-row select:focus,
+.form-row textarea:focus {
+  outline: none; border-color: var(--accent);
+}
+.form-row textarea { resize: vertical; min-height: 72px; }
+.form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
+}
+</style>
+{% endblock %}
+
+{% block page_title %}Magazyn{% endblock %}
+
+{% block content %}
+
+<!-- HEADER -->
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1>🏭 Rejestr przyjęć kontenerów</h1>
+    <p>Ewidencja przyjęć, statusy sprawdzenia &nbsp;<span style="font-size:11px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--border);border-radius:20px;padding:2px 9px;font-weight:600;vertical-align:middle">🔁 Zakupy + Transport</span></p>
+  </div>
+</div>
+
+<!-- NADCHODZĄCE DOSTAWY (bliskie okno czasowe) -->
+<div x-data="upcomingDeliveries()" x-init="load()" style="margin:6px 0 18px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+    <h2 style="font-size:15px;font-weight:800;margin:0">🚚 Nadchodzące dostawy</h2>
+    <div style="display:flex;gap:4px">
+      <template x-for="d in [5,10,14,30]" :key="d">
+        <button class="btn btn-sm" :class="days===d?'btn-primary':'btn-ghost'" @click="days=d;load()"
+                x-text="d+' dni'"></button>
+      </template>
+    </div>
+    <span style="font-size:12px;color:var(--muted)" x-text="loading?'ładowanie…':('w oknie: '+count)"></span>
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase">
+      <th style="padding:6px 8px">Za ile</th><th style="padding:6px 8px">Data</th>
+      <th style="padding:6px 8px">PO</th><th style="padding:6px 8px">Dostawca</th>
+      <th style="padding:6px 8px">Kontener</th><th style="padding:6px 8px">Status</th></tr></thead>
+    <tbody>
+      <template x-for="u in items" :key="u.nr">
+        <tr style="border-top:1px solid var(--border)">
+          <td style="padding:6px 8px;font-weight:800"
+              :style="u.days_left<0?'color:#dc2626':(u.days_left<=3?'color:#b45309':'')"
+              x-text="u.days_left<0?(Math.abs(u.days_left)+' dni temu'):(u.days_left===0?'dziś':('za '+u.days_left+' dni'))"></td>
+          <td style="padding:6px 8px;font-family:var(--mono)" x-text="u.arrival + ' (' + u.source + ')'"></td>
+          <td style="padding:6px 8px;font-family:var(--mono);font-weight:600"><a :href="'/dostawy/'+u.nr" x-text="u.nr"></a></td>
+          <td style="padding:6px 8px;color:var(--muted)" x-text="u.supplier"></td>
+          <td style="padding:6px 8px;font-family:var(--mono)" x-text="u.container||'—'"></td>
+          <td style="padding:6px 8px;font-size:12px" x-text="u.status"></td>
+        </tr>
+      </template>
+      <template x-if="!loading && items.length===0">
+        <tr><td colspan="6" style="padding:14px;text-align:center;color:var(--muted);font-style:italic">Brak dostaw w najbliższych <span x-text="days"></span> dniach</td></tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+<script>
+function upcomingDeliveries(){
+  return { items:[], count:0, days:14, loading:false,
+    async load(){ this.loading=true;
+      try{ const r=await fetch('/api/warehouse/upcoming?days='+this.days); const d=await r.json();
+        this.items=d.items||[]; this.count=d.count||0; }catch(e){}
+      finally{ this.loading=false; } } };
+}
+</script>
+
+<!-- STATS -->
+{% set cnt_all       = items | length %}
+{% set cnt_przybyle  = items | selectattr('status','equalto','przybyle') | list | length %}
+{% set cnt_sprawdzone = items | selectattr('status','equalto','sprawdzone') | list | length %}
+{% set cnt_sap       = items | selectattr('status','in',['do_sap','wprowadzone_sap']) | list | length %}
+
+<div class="wh-stats">
+  <div class="wh-stat">
+    <div class="wh-stat-val">{{ cnt_all }}</div>
+    <div class="wh-stat-lbl">Wszystkie</div>
+  </div>
+  <div class="wh-stat orange">
+    <div class="wh-stat-val">{{ cnt_przybyle }}</div>
+    <div class="wh-stat-lbl">Przybyłe</div>
+  </div>
+  <div class="wh-stat yellow">
+    <div class="wh-stat-val">{{ cnt_sprawdzone }}</div>
+    <div class="wh-stat-lbl">Sprawdzone</div>
+  </div>
+  <div class="wh-stat green">
+    <div class="wh-stat-val">{{ cnt_sap }}</div>
+    <div class="wh-stat-lbl">W SAP</div>
+  </div>
+</div>
+
+<!-- TABLE -->
+<div class="wh-card">
+  <div class="wh-table-wrap">
+    <table class="wh-table" id="whTable">
+      <thead>
+        <tr>
+          <th scope="col">Data przyjęcia</th>
+          <th scope="col">Kontener</th>
+          <th scope="col">Numery PO</th>
+          <th scope="col">Armator/Spedytor</th>
+          <th scope="col">Miejsce rozładunku</th>
+          <th scope="col">Status</th>
+          <th scope="col">Dokument SAP</th>
+          <th scope="col">Rozładunek</th>
+          <th scope="col">Sprawdził</th>
+          <th scope="col">Uwagi</th>
+          <th scope="col">Akcje</th>
+        </tr>
+      </thead>
+      <tbody id="whTbody">
+        {% if items %}
+          {% for item in items %}
+          <tr id="row-{{ item.id }}">
+            <td>{{ item.received_date or '—' }}</td>
+            <td><span class="mono">{{ item.container_number }}</span></td>
+            <td>
+              {% if item.po_numbers %}
+                <span class="mono truncate-cell" title="{{ item.po_numbers }}">{{ item.po_numbers }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ item.carrier or '—' }}</td>
+            <td>{{ item.unload_location or '—' }}</td>
+            <td>
+              {% if item.status == 'przybyle' %}
+                <span class="badge badge-przybyle">🟡 Przybyło</span>
+              {% elif item.status == 'sprawdzone' %}
+                <span class="badge badge-sprawdzone">🔵 Sprawdzone</span>
+              {% elif item.status == 'do_sap' %}
+                <span class="badge badge-do_sap">🟠 Do SAP</span>
+              {% elif item.status == 'wprowadzone_sap' %}
+                <span class="badge badge-wprowadzone_sap">🟢 W SAP</span>
+              {% else %}
+                <span class="badge">{{ item.status }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if item.sap_document %}
+                <span class="mono">{{ item.sap_document }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if item.unloaded_by or item.unload_start %}
+                <div style="font-size:12px">{{ item.unloaded_by or '—' }}</div>
+                <div class="mono unload-dur" data-start="{{ item.unload_start or '' }}"
+                     data-end="{{ item.unload_end or '' }}" data-norm="{{ item.unload_norm_min or 0 }}"
+                     style="font-size:11px;color:var(--muted)"></div>
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ item.checked_by_name or '—' }}</td>
+            <td>
+              {% if item.notes %}
+                <span class="truncate-cell" title="{{ item.notes }}">{{ item.notes[:60] }}{% if item.notes|length > 60 %}…{% endif %}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+                <button type="button" class="btn btn-sm btn-icon" title="Edytuj" aria-label="Edytuj przyjęcie" onclick="openEdit({{ item | tojson }})">✏️</button>
+
+                {% if item.status == 'przybyle' %}
+                  <button type="button" class="qs-btn" onclick="quickStatus({{ item.id }}, 'sprawdzone')">→ Sprawdź</button>
+                {% endif %}
+                {% if item.status in ['przybyle','sprawdzone'] %}
+                  <button type="button" class="qs-btn" onclick="quickStatus({{ item.id }}, 'do_sap')">→ Do SAP</button>
+                {% endif %}
+                {% if item.status == 'do_sap' %}
+                  <button type="button" class="qs-btn" onclick="quickStatus({{ item.id }}, 'wprowadzone_sap')">→ W SAP</button>
+                {% endif %}
+
+                {% if role in ['admin','manager'] %}
+                  <button type="button" class="btn btn-sm btn-danger btn-icon" title="Usuń" aria-label="Usuń przyjęcie" onclick="deleteReceipt({{ item.id }}, {{ item.container_number|tojson }})">🗑</button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr class="empty-state-row">
+            <td colspan="11">
+              <div style="font-size:32px;margin-bottom:8px">📥</div>
+              <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">Brak wpisów</div>
+              <div style="font-size:13px">Przyjęcia pojawiają się tu automatycznie, gdy dostawa wejdzie w status magazynowy. Operator je tylko edytuje (kto rozładował/sprawdził, czas, dokument SAP).</div>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ADD / EDIT MODAL -->
+<div class="modal-overlay" id="whModal" onclick="closeModalOutside(event)" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle">✏️ Edytuj przyjęcie</div>
+
+    <input type="hidden" id="editId" value="">
+
+    <div class="form-row-2">
+      <div class="form-row">
+        <label for="fContainer">Numer kontenera *</label>
+        <input type="text" id="fContainer" placeholder="np. TCKU1234567" style="font-family:var(--mono);text-transform:uppercase" aria-required="true">
+      </div>
+      <div class="form-row">
+        <label for="fDate">Data przyjęcia</label>
+        <input type="date" id="fDate">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label for="fPo">Numery PO</label>
+      <input type="text" id="fPo" placeholder="np. PO-2024-001, PO-2024-002">
+    </div>
+
+    <div class="form-row-2">
+      <div class="form-row">
+        <label for="fCarrier">Armator / Spedytor</label>
+        <input type="text" id="fCarrier" placeholder="np. Maersk, DB Schenker">
+      </div>
+      <div class="form-row">
+        <label for="fLocation">Miejsce rozładunku</label>
+        <input type="text" id="fLocation" placeholder="np. Radom, Magazyn C">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label for="fStatus">Status</label>
+      <select id="fStatus">
+        <option value="przybyle">🟡 Przybyło</option>
+        <option value="sprawdzone">🔵 Sprawdzone</option>
+        <option value="do_sap">🟠 Do SAP</option>
+        <option value="wprowadzone_sap">🟢 W SAP</option>
+      </select>
+    </div>
+
+    <div class="form-row">
+      <label for="fSap">Numer dokumentu SAP (MIGO)</label>
+      <input type="text" id="fSap" placeholder="np. 5000001234" style="font-family:var(--mono)">
+    </div>
+
+    <div class="form-row-2">
+      <div class="form-row">
+        <label for="fUnloadedBy">Kto rozładował</label>
+        <input type="text" id="fUnloadedBy" placeholder="np. brygada A / Jan K.">
+      </div>
+      <div class="form-row">
+        <label for="fUnloadNorm">Norma rozładunku (min) — narzucona</label>
+        <input type="number" id="fUnloadNorm" min="0" value="120" oninput="updateUnloadHint()">
+      </div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row">
+        <label for="fUnloadStart">Początek rozładunku</label>
+        <input type="datetime-local" id="fUnloadStart" oninput="updateUnloadHint()">
+      </div>
+      <div class="form-row">
+        <label for="fUnloadEnd">Koniec rozładunku</label>
+        <input type="datetime-local" id="fUnloadEnd" oninput="updateUnloadHint()">
+      </div>
+    </div>
+    <div class="form-row" id="unloadHint" style="font-size:12px;margin-top:-6px;color:var(--muted)"></div>
+
+    <div class="form-row">
+      <label for="fCondition">Uwagi o stanie (condition notes)</label>
+      <textarea id="fCondition" placeholder="Stan kontenera, uszkodzenia, odchylenia..."></textarea>
+    </div>
+
+    <div class="form-row">
+      <label for="fNotes">Dodatkowe uwagi</label>
+      <textarea id="fNotes" placeholder="Notatki, numery LOT, specjalne instrukcje..."></textarea>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn" onclick="closeModal()">Anuluj</button>
+      <button type="button" class="btn btn-primary" id="saveBtnModal" onclick="saveReceipt()">Zapisz</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── MODAL ──────────────────────────────────────────────────────────────────
+// Przyjęcia tworzone są automatycznie (gdy dostawa wejdzie w status magazynowy).
+// Operator wyłącznie edytuje istniejące wpisy — brak ręcznego dodawania.
+function openEdit(item) {
+  document.getElementById('editId').value = item.id;
+  document.getElementById('modalTitle').textContent = '✏️ Edytuj przyjęcie';
+  document.getElementById('saveBtnModal').textContent = 'Zapisz zmiany';
+  document.getElementById('fContainer').value = item.container_number || '';
+  document.getElementById('fDate').value = item.received_date || '';
+  document.getElementById('fPo').value = item.po_numbers || '';
+  document.getElementById('fCarrier').value = item.carrier || '';
+  document.getElementById('fLocation').value = item.unload_location || '';
+  document.getElementById('fStatus').value = item.status || 'przybyle';
+  document.getElementById('fSap').value = item.sap_document || '';
+  document.getElementById('fCondition').value = item.condition_notes || '';
+  document.getElementById('fNotes').value = item.notes || '';
+  document.getElementById('fUnloadedBy').value = item.unloaded_by || '';
+  document.getElementById('fUnloadNorm').value = (item.unload_norm_min != null ? item.unload_norm_min : 120);
+  document.getElementById('fUnloadStart').value = item.unload_start || '';
+  document.getElementById('fUnloadEnd').value = item.unload_end || '';
+  updateUnloadHint();
+  document.getElementById('whModal').classList.add('open');
+}
+
+// Podpowiedź: czas rozładunku vs narzucona norma
+function updateUnloadHint() {
+  var s = document.getElementById('fUnloadStart').value;
+  var e = document.getElementById('fUnloadEnd').value;
+  var n = parseInt(document.getElementById('fUnloadNorm').value) || 0;
+  var el = document.getElementById('unloadHint');
+  if (!s || !e) { el.textContent = n ? ('Narzucona norma: ' + n + ' min') : ''; el.style.color = 'var(--muted)'; return; }
+  var d = Math.round((new Date(e) - new Date(s)) / 60000);
+  if (isNaN(d) || d < 0) { el.textContent = 'Sprawdź daty — koniec przed początkiem'; el.style.color = '#dc2626'; return; }
+  var over = n > 0 && d > n;
+  el.textContent = 'Czas rozładunku: ' + d + ' min · norma: ' + n + ' min · ' + (over ? ('przekroczono o ' + (d - n) + ' min') : 'w normie ✓');
+  el.style.color = over ? '#dc2626' : '#16a34a';
+}
+
+function closeModal() {
+  document.getElementById('whModal').classList.remove('open');
+}
+
+function closeModalOutside(e) {
+  if (e.target === document.getElementById('whModal')) closeModal();
+}
+
+// ── SAVE ───────────────────────────────────────────────────────────────────
+async function saveReceipt() {
+  var rid = document.getElementById('editId').value;
+  if (!rid) { toast('Przyjęcia tworzone są automatycznie — można tylko edytować', 'error'); return; }
+  var container = document.getElementById('fContainer').value.trim().toUpperCase();
+  if (!container) { toast('Numer kontenera jest wymagany', 'error'); return; }
+
+  var payload = {
+    container_number: container,
+    received_date:    document.getElementById('fDate').value,
+    po_numbers:       document.getElementById('fPo').value.trim(),
+    carrier:          document.getElementById('fCarrier').value.trim(),
+    unload_location:  document.getElementById('fLocation').value.trim(),
+    status:           document.getElementById('fStatus').value,
+    sap_document:     document.getElementById('fSap').value.trim(),
+    condition_notes:  document.getElementById('fCondition').value.trim(),
+    notes:            document.getElementById('fNotes').value.trim(),
+    unloaded_by:      document.getElementById('fUnloadedBy').value.trim(),
+    unload_start:     document.getElementById('fUnloadStart').value,
+    unload_end:       document.getElementById('fUnloadEnd').value,
+    unload_norm_min:  parseInt(document.getElementById('fUnloadNorm').value) || 0,
+  };
+
+  try {
+    var r = await fetch('/api/warehouse/receipts/' + rid, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    var d = await r.json();
+    if (d.ok) {
+      toast('Zaktualizowano', 'ok');
+      closeModal();
+      location.reload();
+    } else {
+      toast(d.error || 'Błąd zapisu', 'error');
+    }
+  } catch(e) {
+    toast('Błąd połączenia', 'error');
+  }
+}
+
+// ── QUICK STATUS ───────────────────────────────────────────────────────────
+async function quickStatus(rid, newStatus) {
+  try {
+    var r = await fetch('/api/warehouse/receipts/' + rid, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status: newStatus})
+    });
+    var d = await r.json();
+    if (d.ok) {
+      toast('Status zaktualizowany', 'ok');
+      location.reload();
+    } else {
+      toast(d.error || 'Błąd', 'error');
+    }
+  } catch(e) {
+    toast('Błąd połączenia', 'error');
+  }
+}
+
+// ── DELETE ─────────────────────────────────────────────────────────────────
+function deleteReceipt(rid, name) {
+  confirmModal('Usunąć wpis kontenera ' + name + '?', async function() {
+    try {
+      var r = await fetch('/api/warehouse/receipts/' + rid, {method: 'DELETE'});
+      var d = await r.json();
+      if (d.ok) {
+        toast('Usunięto', 'ok');
+        var row = document.getElementById('row-' + rid);
+        if (row) row.remove();
+      } else {
+        toast(d.error || 'Błąd', 'error');
+      }
+    } catch(e) {
+      toast('Błąd połączenia', 'error');
+    }
+  }, {title: 'Usuń wpis', danger: true, okLabel: 'Usuń'});
+}
+
+// ── Czas rozładunku vs norma w tabeli ───────────────────────────────────────
+document.querySelectorAll('.unload-dur').forEach(function(el) {
+  var s = el.dataset.start, e = el.dataset.end, n = parseInt(el.dataset.norm) || 0;
+  if (!s || !e) { el.textContent = n ? ('norma ' + n + ' min') : ''; return; }
+  var d = Math.round((new Date(e) - new Date(s)) / 60000);
+  if (isNaN(d) || d < 0) { el.textContent = ''; return; }
+  var over = n > 0 && d > n;
+  el.textContent = d + ' min' + (n ? (' / ' + n) : '');
+  el.style.color = over ? '#dc2626' : '#16a34a';
+  el.style.fontWeight = '700';
+});
+</script>
+{% endblock %}

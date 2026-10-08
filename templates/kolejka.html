@@ -1,0 +1,696 @@
+{% extends "base.html" %}
+{% block title %}Kolejka zleceń — DocCompare{% endblock %}
+
+{% block extra_head %}
+<style>
+
+.kj-stats { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+.kj-stat { background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:12px 20px; min-width:120px; text-align:center; }
+.kj-stat-val { font-size:22px; font-weight:800; color:var(--text); font-family:var(--mono); }
+.kj-stat-lbl { font-size:11px; color:var(--muted); margin-top:2px; font-weight:600;
+  text-transform:uppercase; letter-spacing:.4px; }
+.kj-stat.orange .kj-stat-val { color:var(--warn); }
+.kj-stat.blue   .kj-stat-val { color:var(--accent); }
+.kj-stat.green  .kj-stat-val { color:var(--ok, #16a34a); }
+
+.kj-filters { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
+.kj-filters input, .kj-filters select {
+  padding:8px 12px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--text); font-size:13px; }
+.kj-filters input[type=search] { min-width:240px; }
+
+.kj-table-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:12px; background:var(--surface); }
+table.kj { width:100%; border-collapse:collapse; font-size:13px; }
+table.kj th { text-align:left; padding:10px 12px; background:var(--bg, #f8fafc);
+  color:var(--muted); font-weight:700; font-size:11px; text-transform:uppercase;
+  letter-spacing:.4px; border-bottom:1px solid var(--border); white-space:nowrap; }
+table.kj td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+table.kj tr:last-child td { border-bottom:none; }
+table.kj tr:hover td { background:var(--bg, #f8fafc); }
+.kj-po { font-family:var(--mono); font-weight:700; color:var(--text); }
+.kj-cont { font-family:var(--mono); font-size:12px; color:var(--muted); }
+.kj-cont.none { color:var(--warn); font-style:italic; }
+
+.badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:700;
+  background:var(--bg,#eef2ff); color:var(--accent); white-space:nowrap; }
+.badge.gray  { background:#f1f5f9; color:#64748b; }
+.badge.green { background:#dcfce7; color:#15803d; }
+.badge.amber { background:#fef3c7; color:#b45309; }
+.prio-pilny    { color:var(--error); font-weight:800; }
+.prio-spokojnie{ color:var(--muted); }
+
+.kj-empty { text-align:center; padding:60px 20px; color:var(--muted); }
+.kj-empty .big { font-size:38px; margin-bottom:10px; }
+.kj-yes { color:#15803d; font-weight:700; }
+.kj-no  { color:var(--warn); }
+
+[x-cloak] { display:none !important; }
+.kj-modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.45);
+  display:flex; align-items:center; justify-content:center; z-index:100; padding:20px; }
+.kj-modal { background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:24px; width:100%; max-width:460px; box-shadow:0 20px 50px rgba(0,0,0,.3); }
+.kj-form { display:flex; flex-direction:column; gap:12px; }
+.kj-form label { font-size:12px; font-weight:600; color:var(--muted); display:flex; flex-direction:column; gap:4px; }
+.kj-form input, .kj-form select, .kj-form textarea {
+  padding:8px 11px; border-radius:8px; border:1px solid var(--border);
+  background:var(--bg,#fff); color:var(--text); font-size:13px; font-weight:400; }
+.kj-del { color:var(--error); cursor:pointer; font-size:12px; background:none; border:none; }
+.kj-del:hover { text-decoration:underline; }
+
+.btn-mini { display:inline-block; padding:3px 9px; border-radius:6px; font-size:11px;
+  font-weight:600; cursor:pointer; border:1px solid var(--border); background:var(--surface);
+  color:var(--text); white-space:nowrap; }
+.btn-mini:hover { border-color:var(--muted); }
+.badge.ok       { background:#dcfce7; color:#15803d; }
+.badge.warning  { background:#fef3c7; color:#b45309; }
+.badge.error    { background:#fee2e2; color:#b91c1c; }
+.badge.critical { background:#fecaca; color:#991b1b; }
+.kj-proforma-on { color:#15803d; font-size:12px; font-weight:600; }
+.kj-cell-stack  { display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
+
+.kj-status-btn { background:none; border:none; cursor:pointer; padding:0; }
+.kj-status-btn:hover .badge { outline:2px solid var(--accent); outline-offset:1px; text-decoration:underline; }
+.kj-timeline { max-height:300px; overflow-y:auto; padding-left:4px; }
+.kj-tl-item { display:flex; gap:10px; padding:7px 0; }
+.kj-tl-dot { width:9px; height:9px; border-radius:50%; background:var(--accent);
+  margin-top:5px; flex-shrink:0; box-shadow:0 0 0 3px var(--bg,#eef2ff); }
+.kj-tl-main { font-size:13px; color:var(--text); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.kj-tl-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+
+.kj-bell { position:relative; }
+.kj-bell-badge { position:absolute; top:-6px; right:-6px; background:var(--error); color:#fff;
+  font-size:10px; font-weight:700; border-radius:999px; padding:1px 5px; min-width:16px; text-align:center; }
+.kj-notif-panel { position:absolute; right:0; top:44px; width:340px; max-height:420px; overflow-y:auto;
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  box-shadow:0 16px 40px rgba(0,0,0,.2); z-index:90; padding:8px; }
+.kj-notif-item { padding:9px 10px; border-radius:8px; font-size:13px; cursor:pointer; }
+.kj-notif-item.unread { background:var(--bg,#eff6ff); font-weight:600; }
+.kj-notif-item:hover { background:#f1f5f9; }
+.kj-notif-meta { font-size:11px; color:var(--muted); margin-top:2px; font-weight:400; }
+</style>
+{% endblock %}
+
+{% block page_title %}Kolejka transportowa{% endblock %}
+
+{% block content %}
+<div x-data="kolejkaView()">
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div>
+      <h1>🗂️ Kolejka zleceń</h1>
+      <p>Wspólna tablica Zakupy ↔ Transport. Klucz: numer zamówienia (PO) + kontener.</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button type="button" class="btn btn-primary" @click="openNew()">➕ Nowe zlecenie</button>
+      <button type="button" class="btn" @click="$refs.xlsx.click()">📥 Import z Excela</button>
+      <input type="file" x-ref="xlsx" accept=".xlsx,.xls" style="display:none" @change="importExcel($event)">
+      <div class="kj-bell">
+        <button type="button" class="btn" @click="toggleNotif()">🔔
+          <span class="kj-bell-badge" x-show="notif.unread>0" x-text="notif.unread"></span>
+        </button>
+        <div class="kj-notif-panel" x-show="notif.open" x-cloak @click.outside="notif.open=false">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px 8px">
+            <strong style="font-size:13px">Powiadomienia</strong>
+            <button type="button" class="btn-mini" @click="markAllRead()">Odczytaj wszystkie</button>
+          </div>
+          <template x-if="notif.loading"><div style="padding:10px;color:var(--muted);font-size:13px">Wczytywanie…</div></template>
+          <template x-if="!notif.loading && notif.items.length===0"><div style="padding:10px;color:var(--muted);font-size:13px">Brak powiadomień.</div></template>
+          <template x-for="n in notif.items" :key="n.id">
+            <div class="kj-notif-item" :class="n.przeczytane ? '' : 'unread'" @click="markRead(n)">
+              <div x-text="n.tresc"></div>
+              <div class="kj-notif-meta" x-text="n.created_at"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: nowe zlecenie -->
+  <div x-show="modal" x-cloak class="kj-modal-bg" @click.self="modal=false" @keydown.window.escape="modal=false"
+       role="dialog" aria-modal="true" aria-labelledby="newOrderModalTitle">
+    <div class="kj-modal">
+      <h2 id="newOrderModalTitle" style="font-size:17px;font-weight:800;margin-bottom:14px">➕ Nowe zlecenie (PO)</h2>
+      <div class="kj-form">
+        <label>Numer zamówienia (PO) <span style="color:var(--error)">*</span>
+          <input type="text" x-model="form.nr_zamowienia" placeholder="np. 4500012345"
+                 @keydown.enter="saveNew()">
+        </label>
+        <label>Dostawca
+          <input type="text" x-model="form.supplier_name" placeholder="np. Eastport">
+        </label>
+        <label>Kod dostawcy (SAP)
+          <input type="text" x-model="form.supplier_code" placeholder="np. 1234567">
+        </label>
+        <label>Link do folderu na dysku Z
+          <input type="text" x-model="form.z_folder_link" placeholder="Z:\\Zamowienia\\4500012345">
+        </label>
+        <label>Planowane ETD
+          <input type="date" x-model="form.planowane_etd">
+        </label>
+        <label>Priorytet
+          <select x-model="form.priorytet">
+            <option value="normalny">🟡 Normalny</option>
+            <option value="pilny">🔴 Pilny (natychmiast)</option>
+            <option value="spokojnie">🟢 Spokojnie (może poczekać)</option>
+          </select>
+        </label>
+        <label>Uwagi
+          <textarea x-model="form.uwagi" rows="2" placeholder="opcjonalnie"></textarea>
+        </label>
+      </div>
+      <div x-show="err" x-text="err" style="color:var(--error);font-size:13px;margin-top:8px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button type="button" class="btn" @click="modal=false">Anuluj</button>
+        <button type="button" class="btn btn-primary" id="saveNewBtn" @click="saveNew()" :disabled="saving"
+                x-text="saving ? 'Zapisywanie…' : 'Zapisz'"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: szczegóły zlecenia + oś czasu -->
+  <div x-show="detail.open" x-cloak class="kj-modal-bg" @click.self="detail.open=false" @keydown.window.escape="detail.open=false"
+       role="dialog" aria-modal="true" aria-labelledby="detailModalTitle">
+    <div class="kj-modal" style="max-width:540px">
+      <h2 id="detailModalTitle" style="font-size:17px;font-weight:800;margin-bottom:4px">
+        Zlecenie <span style="font-family:var(--mono)" x-text="detail.rec.nr_zamowienia"></span>
+      </h2>
+      <div x-show="detail.error" x-text="detail.error" style="color:var(--error);font-size:13px;margin-bottom:8px"></div>
+
+      <div style="display:flex;gap:8px;align-items:flex-end;margin:14px 0">
+        <label style="flex:1;font-size:12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:4px">
+          Status
+          <select x-model="detail.status"
+                  style="padding:8px 11px;border-radius:8px;border:1px solid var(--border);background:var(--bg,#fff);color:var(--text);font-size:13px">
+            {% for code, label in statusy %}
+            <option value="{{ code }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="button" class="btn btn-primary" @click="setStatus()" :disabled="detail.saving"
+                x-text="detail.saving ? 'Zapisywanie…' : 'Zmień status'"></button>
+      </div>
+
+      <!-- Krok 10: rodzaj transportu + zgoda na wypłynięcie -->
+      <div style="background:var(--bg,#f8fafc);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:6px">
+        <div style="font-weight:700;font-size:12px;margin-bottom:8px">🚢 Wypłynięcie (krok 10)</div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <label style="flex:1;font-size:12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:4px">
+            Rodzaj transportu
+            <select x-model="detail.rec.rodzaj_transportu"
+                    style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px">
+              <option value="">— wybierz —</option>
+              <option value="40HQ">40HQ</option>
+              <option value="20DV">20DV</option>
+              <option value="LCL">LCL</option>
+            </select>
+          </label>
+          <button type="button" class="btn" @click="setRodzaj()">Zapisz rodzaj</button>
+        </div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <template x-if="detail.rec.zgoda_wyplyniecie">
+            <span class="kj-yes">✓ Zgoda udzielona<span x-show="detail.rec.zgoda_by_name" x-text="' · ' + detail.rec.zgoda_by_name"></span></span>
+          </template>
+          <template x-if="!detail.rec.zgoda_wyplyniecie">
+            <span class="kj-no">— Brak zgody na wypłynięcie —</span>
+          </template>
+          {% if role in ['specjalista','manager','superuser','admin'] %}
+          <template x-if="!detail.rec.zgoda_wyplyniecie">
+            <button type="button" class="btn btn-primary" @click="setZgoda(true)">✓ Zatwierdź wypłynięcie</button>
+          </template>
+          <template x-if="detail.rec.zgoda_wyplyniecie">
+            <button type="button" class="btn" @click="setZgoda(false)">Cofnij zgodę</button>
+          </template>
+          {% else %}
+          <span style="font-size:11px;color:var(--muted)">(zgodę nadaje rola: specjalista)</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Krok 14/17/23: kontener + FO + rozliczenie frachtu -->
+      <div style="background:var(--bg,#f8fafc);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:6px">
+        <div style="font-weight:700;font-size:12px;margin-bottom:8px">📦 Kontener (krok 14/17/23)</div>
+        <template x-if="!detail.rec.kontener_id">
+          <div>
+            <div style="display:flex;gap:8px;align-items:flex-end">
+              <label style="flex:1;font-size:12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:4px">
+                Numer kontenera
+                <input type="text" x-model="detail.kontNumer" placeholder="np. MSKU1234567"
+                       style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-family:var(--mono)">
+              </label>
+              <button type="button" class="btn btn-primary" @click="assignKontener()">Przypnij</button>
+            </div>
+            <div x-show="detail.kontenerErr" x-text="detail.kontenerErr" style="color:var(--error);font-size:12px;margin-top:4px"></div>
+          </div>
+        </template>
+        <template x-if="detail.rec.kontener_id">
+          <div>
+            <div style="font-size:13px;margin-bottom:8px">
+              Kontener: <strong style="font-family:var(--mono)" x-text="detail.rec.kontener_numer"></strong>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <label style="font-size:12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:4px">
+                Numer FO
+                <input type="text" x-model="detail.rec.kontener_fo"
+                       style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px">
+              </label>
+              <label style="font-size:12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:4px">
+                Status FO
+                <select x-model="detail.rec.kontener_fo_status"
+                        style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px">
+                  <option value="">—</option>
+                  <option value="zalozone">Założone</option>
+                  <option value="w_realizacji">W realizacji</option>
+                  <option value="rozliczone">Rozliczone</option>
+                </select>
+              </label>
+              <label style="font-size:12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:4px">
+                ETD planowany
+                <input type="date" x-model="detail.rec.kontener_etd_plan"
+                       style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px">
+              </label>
+              <label style="font-size:12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:4px">
+                ETD realny (tracking / korekta)
+                <input type="date" x-model="detail.rec.kontener_etd_real"
+                       style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px">
+              </label>
+              <label style="font-size:12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:4px;grid-column:1/3">
+                Numer rozliczenia frachtu
+                <input type="text" x-model="detail.rec.kontener_rozliczenie"
+                       style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px">
+              </label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+              <button type="button" class="btn-mini" @click="trackKontener()">📡 Pobierz tracking</button>
+              <template x-if="detail.rec.kontener_opoznienie !== null && detail.rec.kontener_opoznienie !== undefined">
+                <span :class="detail.rec.kontener_opoznienie > 3 ? 'badge error' : 'badge ok'"
+                      x-text="detail.rec.kontener_opoznienie > 0 ? ('opóźnienie ' + detail.rec.kontener_opoznienie + ' dni') : (detail.rec.kontener_opoznienie === 0 ? 'terminowo' : ('przed czasem ' + (-detail.rec.kontener_opoznienie) + ' dni'))"></span>
+              </template>
+              <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" :checked="detail.rec.kontener_agent==1"
+                       @change="detail.rec.kontener_agent = $event.target.checked ? 1 : 0">
+                Potwierdzenie agenta
+              </label>
+            </div>
+            <div x-show="detail.trackResult" style="background:var(--bg);border-radius:8px;padding:10px;margin-top:8px;font-size:12px">
+              <div>Przewoźnik: <span x-text="detail.trackResult?.carrier || '—'"></span></div>
+              <div>ETD real: <span x-text="detail.trackResult?.etd_real || '—'"></span></div>
+              <div>ETA: <span x-text="detail.trackResult?.eta || '—'"></span></div>
+              <div x-show="detail.trackResult?.opoznienie_dni !== null">
+                Opóźnienie: <span x-text="detail.trackResult?.opoznienie_dni"></span> dni
+                <span x-show="detail.trackResult?.alert" style="color:var(--error)">⚠️ ALERT</span>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-top:8px">
+              <button type="button" class="btn" @click="saveKontener()">Zapisz kontener</button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div style="font-weight:700;font-size:13px;margin:12px 0 6px">Oś czasu kroków</div>
+      <div class="kj-timeline">
+        <template x-if="detail.loading"><div style="color:var(--muted);font-size:13px">Wczytywanie…</div></template>
+        <template x-if="!detail.loading && detail.historia.length===0">
+          <div style="color:var(--muted);font-size:13px">Brak zdarzeń.</div>
+        </template>
+        <template x-for="(h, i) in detail.historia" :key="i">
+          <div class="kj-tl-item">
+            <div class="kj-tl-dot"></div>
+            <div>
+              <div class="kj-tl-main">
+                <span x-show="h.krok" class="badge gray" x-text="'krok ' + h.krok"></span>
+                <span x-text="tlText(h)"></span>
+              </div>
+              <div class="kj-tl-meta" x-text="(h.changed_by_name || '—') + ' · ' + (h.changed_at || '')"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px">
+        <button type="button" class="btn" @click="detail.open=false">Zamknij</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="kj-stats">
+    <div class="kj-stat blue">
+      <div class="kj-stat-val">{{ stats.total }}</div>
+      <div class="kj-stat-lbl">Zleceń</div>
+    </div>
+    <div class="kj-stat orange">
+      <div class="kj-stat-val">{{ stats.bez_zgody }}</div>
+      <div class="kj-stat-lbl">Bez zgody na wypłynięcie</div>
+    </div>
+    <div class="kj-stat orange">
+      <div class="kj-stat-val">{{ stats.bez_kont }}</div>
+      <div class="kj-stat-lbl">Bez kontenera</div>
+    </div>
+    <div class="kj-stat green">
+      <div class="kj-stat-val">{{ stats.rozliczone }}</div>
+      <div class="kj-stat-lbl">Rozliczone</div>
+    </div>
+  </div>
+
+  <div class="kj-filters">
+    <label for="kjSearch" class="sr-only">Szukaj w kolejce: PO, dostawca, kontener</label>
+    <input type="search" id="kjSearch" x-model.debounce.300ms="q" placeholder="Szukaj: PO, dostawca, kontener…" autocomplete="off">
+    <select x-model="fStatus">
+      <option value="">— wszystkie statusy —</option>
+      {% for code, label in statusy %}
+      <option value="{{ code }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select x-model="fPrio">
+      <option value="">— priorytet —</option>
+      <option value="pilny">Pilny</option>
+      <option value="normalny">Normalny</option>
+      <option value="spokojnie">Spokojnie</option>
+    </select>
+    <span style="color:var(--muted);font-size:12px" x-text="visibleCount() + ' / {{ stats.total }}'"></span>
+  </div>
+
+  <div class="kj-table-wrap">
+    <table class="kj">
+      <thead>
+        <tr>
+          <th scope="col">PO / Zamówienie</th>
+          <th scope="col">Dostawca</th>
+          <th scope="col">Status</th>
+          <th scope="col">Kontener</th>
+          <th scope="col">Rodzaj</th>
+          <th scope="col">Zgoda wypł.</th>
+          <th scope="col">Plan. ETD</th>
+          <th scope="col">Data dostawy</th>
+          <th scope="col">Priorytet</th>
+          <th scope="col">Proforma / Wynik</th>
+          {% if role in ['manager','superuser','admin'] %}<th scope="col"></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+        <tr x-show="match({{ {
+              'po': it.nr_zamowienia or '',
+              'sup': it.supplier_name or it.supplier_code or '',
+              'cont': it.kontener_numer or '',
+              'status': it.status or '',
+              'prio': it.priorytet or ''
+            } | tojson }})">
+          <td class="kj-po">{{ it.nr_zamowienia }}</td>
+          <td>{{ it.supplier_name or it.supplier_code or '—' }}</td>
+          <td>
+            <button type="button" class="kj-status-btn" @click="openDetail({{ it.id }})"
+                    title="Kliknij: szczegóły, status, zgoda, oś czasu">
+              <span class="badge gray">{{ it.status_label }}</span>
+            </button>
+          </td>
+          <td>
+            {% if it.kontener_numer %}
+              <span class="kj-cont">{{ it.kontener_numer }}</span>
+            {% else %}
+              <span class="kj-cont none">— brak —</span>
+            {% endif %}
+          </td>
+          <td>{{ it.rodzaj_transportu or '—' }}</td>
+          <td>
+            {% if it.zgoda_wyplyniecie %}
+              <span class="kj-yes">✓ tak</span>
+            {% else %}
+              <span class="kj-no">— nie —</span>
+            {% endif %}
+          </td>
+          <td>{{ it.planowane_etd or '—' }}</td>
+          <td>{{ it.data_dostawy or '—' }}</td>
+          <td>
+            {% if it.priorytet == 'pilny' %}<span class="prio-pilny">Pilny</span>
+            {% elif it.priorytet == 'spokojnie' %}<span class="prio-spokojnie">Spokojnie</span>
+            {% else %}Normalny{% endif %}
+          </td>
+          <td>
+            <div class="kj-cell-stack">
+              <input type="file" id="prof-{{ it.id }}" accept=".pdf" style="display:none"
+                     @change="uploadProforma({{ it.id }}, $event)">
+              <input type="file" id="ref-{{ it.id }}" accept=".pdf" style="display:none"
+                     @change="runCompare({{ it.id }}, $event)">
+              {% if it.has_proforma %}
+                <span class="kj-proforma-on">📎 proforma</span>
+                <span style="font-size:10px;color:var(--muted)">krok 2</span>
+                <button type="button" class="btn-mini" onclick="document.getElementById('ref-{{ it.id }}').click()">⚖ porównaj z SAP/PO</button>
+              {% else %}
+                <span style="font-size:10px;color:var(--muted)">krok 1</span>
+                <button type="button" class="btn-mini" onclick="document.getElementById('prof-{{ it.id }}').click()">⬆ wgraj proformę</button>
+              {% endif %}
+              {% if it.cmp_status %}
+                <a href="/history?q={{ it.nr_zamowienia }}" class="badge {{ it.cmp_status }}"
+                   title="Zobacz w historii porównań">{{ it.cmp_status }} · {{ it.cmp_diff }} różnic</a>
+              {% endif %}
+            </div>
+          </td>
+          {% if role in ['manager','superuser','admin'] %}
+          <td><button type="button" class="kj-del" @click="delZlecenie({{ it.id }}, {{ it.nr_zamowienia | tojson }})">🗑 usuń</button></td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if not items %}
+    <div class="kj-empty">
+      <div class="big">🗂️</div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:4px">Kolejka jest pusta</div>
+      <div>Tu pojawią się zlecenia (PO) od momentu utworzenia aż do rozliczenia.</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function kolejkaView() {
+  return {
+    q: '', fStatus: '', fPrio: '',
+    modal: false, saving: false, err: '',
+    form: { nr_zamowienia:'', supplier_code:'', supplier_name:'', z_folder_link:'', planowane_etd:'', priorytet:'normalny', uwagi:'' },
+    notif: { open:false, items:[], unread:0, loading:false },
+    init() { this.loadNotif(); },
+    async loadNotif() {
+      this.notif.loading = true;
+      try {
+        const r = await fetch('/api/kolejka/powiadomienia');
+        const d = await r.json();
+        this.notif.items = d.powiadomienia || [];
+        this.notif.unread = d.nieprzeczytane || 0;
+      } catch(e) {}
+      this.notif.loading = false;
+    },
+    async toggleNotif() {
+      this.notif.open = !this.notif.open;
+      if (this.notif.open) await this.loadNotif();
+    },
+    async markRead(n) {
+      if (n.przeczytane) return;
+      await fetch('/api/kolejka/powiadomienia/' + n.id + '/przeczytane', {
+        method:'POST', headers:{'X-CSRF-Token':getCsrf()}
+      });
+      n.przeczytane = 1; if (this.notif.unread > 0) this.notif.unread--;
+    },
+    async markAllRead() {
+      await fetch('/api/kolejka/powiadomienia/przeczytaj-wszystkie', {
+        method:'POST', headers:{'X-CSRF-Token':getCsrf()}
+      });
+      this.notif.items.forEach(n => n.przeczytane = 1); this.notif.unread = 0;
+    },
+    detail: { open:false, id:null, rec:{}, status:'', kontNumer:'', historia:[], loading:false, saving:false, kontSaving:false, rodzajSaving:false, kontenerErr:'', trackResult:null },
+    async openDetail(id) {
+      this.detail = { open:true, id, rec:{}, status:'', kontNumer:'', historia:[], loading:true, saving:false, kontSaving:false, rodzajSaving:false, kontenerErr:'', trackResult:null, error:'' };
+      try {
+        const [r1, r2] = await Promise.all([
+          fetch('/api/kolejka/zlecenia/' + id),
+          fetch('/api/kolejka/zlecenia/' + id + '/historia')
+        ]);
+        const d1 = await r1.json(), d2 = await r2.json();
+        this.detail.rec = d1.zlecenie || {};
+        this.detail.status = this.detail.rec.status || '';
+        this.detail.historia = d2.historia || [];
+      } catch(e) { this.detail.error = 'Błąd ładowania danych'; }
+      this.detail.loading = false;
+    },
+    async setRodzaj() {
+      this.detail.rodzajSaving = true;
+      const r = await fetch('/api/kolejka/zlecenia/' + this.detail.id + '/rodzaj-transportu', {
+        method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrf()},
+        body: JSON.stringify({ rodzaj_transportu: this.detail.rec.rodzaj_transportu })
+      });
+      const d = await r.json();
+      this.detail.rodzajSaving = false;
+      if (!r.ok) { toast(d.error || 'Błąd zapisu rodzaju', 'error'); return; }
+      await this.openDetail(this.detail.id);
+    },
+    async setZgoda(approve) {
+      const r = await fetch('/api/kolejka/zlecenia/' + this.detail.id + '/zgoda', {
+        method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrf()},
+        body: JSON.stringify({ approve })
+      });
+      const d = await r.json();
+      if (!r.ok) { toast(d.error || 'Błąd zgody', 'error'); return; }
+      await this.openDetail(this.detail.id);
+    },
+    async assignKontener() {
+      if (!this.detail.kontNumer.trim()) { toast('Podaj numer kontenera', 'warn'); return; }
+      this.detail.kontenerErr = '';
+      const r = await fetch('/api/kolejka/zlecenia/' + this.detail.id + '/kontener', {
+        method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrf()},
+        body: JSON.stringify({ numer_kontenera: this.detail.kontNumer })
+      });
+      const d = await r.json();
+      if (!r.ok) { this.detail.kontenerErr = d.error || 'Błąd przypięcia kontenera'; toast(this.detail.kontenerErr, 'error'); return; }
+      await this.openDetail(this.detail.id);
+    },
+    async saveKontener() {
+      this.detail.kontSaving = true;
+      const r = await fetch('/api/kolejka/kontenery/' + this.detail.rec.kontener_id, {
+        method:'PATCH', headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrf()},
+        body: JSON.stringify({
+          fo_number: this.detail.rec.kontener_fo || '',
+          fo_status: this.detail.rec.kontener_fo_status || '',
+          rozliczenie_frachtu: this.detail.rec.kontener_rozliczenie || '',
+          etd_plan: this.detail.rec.kontener_etd_plan || '',
+          etd_real: this.detail.rec.kontener_etd_real || '',
+          agent_potwierdzil: this.detail.rec.kontener_agent ? 1 : 0
+        })
+      });
+      const d = await r.json();
+      this.detail.kontSaving = false;
+      if (!r.ok) { toast(d.error || 'Błąd zapisu kontenera', 'error'); return; }
+      await this.openDetail(this.detail.id);
+    },
+    async trackKontener() {
+      const r = await fetch('/api/kolejka/kontenery/' + this.detail.rec.kontener_id + '/track', {
+        method:'POST', headers:{'X-CSRF-Token':getCsrf()}
+      });
+      const d = await r.json();
+      if (!r.ok) { toast(d.error || 'Błąd trackingu', 'error'); return; }
+      const trackData = d;
+      await this.openDetail(this.detail.id);
+      this.detail.trackResult = trackData;
+    },
+    async setStatus() {
+      this.detail.saving = true;
+      try {
+        const r = await fetch('/api/kolejka/zlecenia/' + this.detail.id + '/status', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrf()},
+          body: JSON.stringify({ status: this.detail.status })
+        });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || 'Błąd zmiany statusu', 'error'); this.detail.saving = false; return; }
+        await this.openDetail(this.detail.id);
+      } catch(e) { toast('Błąd połączenia', 'error'); this.detail.saving = false; }
+    },
+    tlText(h) {
+      if (h.pole === 'status') return 'Status → ' + (h.nowa_label || h.nowa_wartosc);
+      if (h.pole === 'comparison_id') return 'Wykonano porównanie (#' + h.nowa_wartosc + ')';
+      return h.pole + ' → ' + h.nowa_wartosc;
+    },
+    openNew() {
+      this.err = '';
+      this.form = { nr_zamowienia:'', supplier_code:'', supplier_name:'', z_folder_link:'', planowane_etd:'', priorytet:'normalny', uwagi:'' };
+      this.modal = true;
+    },
+    async saveNew() {
+      if (!this.form.nr_zamowienia.trim()) { this.err = 'Numer zamówienia jest wymagany'; return; }
+      // FIX 1: double-submit prevention (saving flag also drives the button via :disabled binding)
+      if (this.saving) return;
+      this.saving = true; this.err = '';
+      try {
+        const r = await fetch('/api/kolejka/zlecenia', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','X-CSRF-Token':getCsrf()},
+          body: JSON.stringify(this.form)
+        });
+        const d = await r.json();
+        if (!r.ok) { this.err = d.error || 'Błąd zapisu'; return; }
+        // FIX 3: increment stat counter optimistically before reload
+        const statEl = document.querySelector('.kj-stat.blue .kj-stat-val');
+        if (statEl) statEl.textContent = parseInt(statEl.textContent || '0') + 1;
+        location.reload();
+      } catch(e) { this.err = 'Błąd połączenia'; }
+      finally { this.saving = false; }
+    },
+    async importExcel(ev) {
+      const file = ev.target.files[0];
+      if (!file) return;
+      const fd = new FormData(); fd.append('file', file);
+      try {
+        const r = await fetch('/api/kolejka/zlecenia/import', {
+          method:'POST', headers:{'X-CSRF-Token':getCsrf()}, body: fd
+        });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || 'Błąd importu', 'error'); return; }
+        let msg = `Zaimportowano: ${d.created} zleceń.`;
+        if (d.skipped) msg += ` Pominięto ${d.skipped} duplikatów (PO już istnieje).`;
+        if (d.errors && d.errors.length) msg += ' Błędy: ' + d.errors.join('; ');
+        toast(msg, 'ok');
+        location.reload();
+      } catch(e) { toast('Błąd połączenia podczas importu', 'error'); }
+      finally { ev.target.value=''; }
+    },
+    async delZlecenie(id, po) {
+      confirmModal('Usunąć zlecenie ' + po + '?', async () => {
+        const r = await fetch('/api/kolejka/zlecenia/' + id, {
+          method:'DELETE', headers:{'X-CSRF-Token':getCsrf()}
+        });
+        if (r.ok) location.reload(); else toast('Nie udało się usunąć', 'error');
+      }, {okLabel:'Usuń', danger:true});
+    },
+    async uploadProforma(id, ev) {
+      const file = ev.target.files[0]; if (!file) return;
+      // FIX 4: validate PDF type before upload
+      if (!['application/pdf', 'application/octet-stream'].includes(file.type) && !file.name.toLowerCase().endsWith('.pdf')) {
+        toast('Dozwolone tylko pliki PDF', 'error'); ev.target.value = ''; return;
+      }
+      const fd = new FormData(); fd.append('file', file);
+      try {
+        const r = await fetch('/api/kolejka/zlecenia/' + id + '/proforma', {
+          method:'POST', headers:{'X-CSRF-Token':getCsrf()}, body: fd
+        });
+        const d = await r.json();
+        if (!r.ok) toast(d.error || 'Błąd uploadu proformy', 'error');
+        else location.reload();
+      } catch(e) { toast('Błąd połączenia', 'error'); }
+      finally { ev.target.value=''; }
+    },
+    async runCompare(id, ev) {
+      const file = ev.target.files[0]; if (!file) return;
+      // FIX 4: validate PDF type before upload
+      if (!['application/pdf', 'application/octet-stream'].includes(file.type) && !file.name.toLowerCase().endsWith('.pdf')) {
+        toast('Dozwolone tylko pliki PDF', 'error'); ev.target.value = ''; return;
+      }
+      const fd = new FormData(); fd.append('reference', file);
+      try {
+        const r = await fetch('/api/kolejka/zlecenia/' + id + '/compare', {
+          method:'POST', headers:{'X-CSRF-Token':getCsrf()}, body: fd
+        });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || 'Błąd porównania', 'error'); }
+        else { toast('Porównanie gotowe — ryzyko: ' + d.risk_level + ', różnic: ' + d.diff_count, 'ok'); location.reload(); }
+      } catch(e) { toast('Błąd połączenia', 'error'); }
+      finally { ev.target.value=''; }
+    },
+    match(row) {
+      if (this.fStatus && row.status !== this.fStatus) return false;
+      if (this.fPrio && row.prio !== this.fPrio) return false;
+      if (this.q) {
+        const needle = this.q.toLowerCase();
+        const hay = (row.po + ' ' + row.sup + ' ' + row.cont).toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    },
+    visibleCount() {
+      // Liczone z DOM po przefiltrowaniu (proste i wystarczające dla szkieletu)
+      return document.querySelectorAll('table.kj tbody tr:not([style*="display: none"])').length;
+    }
+  };
+}
+</script>
+{% endblock %}

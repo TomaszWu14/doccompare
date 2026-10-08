@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block page_title %}Faktury — pokrycie{% endblock %}
+{% block content %}
+<div class="max-w-4xl space-y-8">
+  <div>
+    <h1 class="text-lg font-semibold mb-4">Pokrycie dostawców</h1>
+    <table class="w-full text-sm border-collapse">
+      <thead>
+        <tr class="text-left border-b">
+          <th class="py-1">Dostawca</th><th>Profil</th><th>Liczba faktur</th><th>Ostatnia</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in suppliers %}
+        <tr class="border-b">
+          <td class="py-1">{{ s.name or s.code }}</td>
+          <td>
+            {% if s.column_mapping_json %}
+            <span class="badge badge-ok">sparametryzowany</span>
+            {% else %}
+            <span class="badge badge-err">brak</span>
+            {% endif %}
+          </td>
+          <td>{{ s.invoice_count or 0 }}</td>
+          <td>{{ s.last_invoice_at or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div>
+    <h2 class="text-lg font-semibold mb-4">Partia {{ batch_id or "—" }}</h2>
+    {% if batch_id %}
+    <p class="mb-3">
+      <a class="text-indigo-600 underline" href="{{ url_for('invoices.export', batch_id=batch_id) }}">Eksportuj do Excela</a>
+      ·
+      {% if sad_total and sad_confirmed == sad_total %}
+      <a class="text-indigo-600 underline" href="{{ url_for('invoices.sad_export', batch_id=batch_id) }}">Draft SAD (WinSAD)</a>
+      {% else %}
+      <span class="text-slate-400 cursor-not-allowed" title="Dokończ przegląd wszystkich dokumentów przed generowaniem draftu SAD">Draft SAD (zatwierdzono {{ sad_confirmed }}/{{ sad_total }})</span>
+      {% endif %}
+    </p>
+    <table class="w-full text-sm border-collapse">
+      <thead><tr class="text-left border-b"><th class="py-1">Plik</th><th>Typ</th><th>Dostawca</th><th>Status</th><th>Nr faktury</th><th></th></tr></thead>
+      <tbody>
+        {% for j in jobs %}
+        <tr class="border-b">
+          <td class="py-1">{{ j.filename }}</td>
+          <td>{{ j.doc_kind or 'invoice' }}{% if j.page_from %} (s.{{ j.page_from }}–{{ j.page_to }}){% endif %}</td>
+          <td>{{ j.supplier_code }}</td>
+          <td>
+            {% if j.status == 'confirmed' %}<span class="badge badge-ok">{{ j.status }}</span>
+            {% elif j.status == 'error' %}<span class="badge badge-err">{{ j.status }}</span>{% if j.error %} — {{ j.error }}{% endif %}
+              <button class="text-indigo-600 underline text-xs ml-1"
+                      onclick="apiFetch('{{ url_for('invoices.reprocess', job_id=j.id) }}', {method:'POST'}).then(() => location.reload())">Ponów</button>
+            {% elif j.status == 'ignored' %}<span class="badge badge-warn">pominięto (B/L/skan)</span>
+            {% else %}<span class="badge badge-info">{{ j.status }}</span>{% endif %}
+          </td>
+          <td>{{ j.invoice_number }}</td>
+          <td><a class="text-indigo-600 underline" href="{{ url_for('invoices.review', job_id=j.id) }}">Przejrzyj</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>Brak partii — wróć do <a class="text-indigo-600 underline" href="{{ url_for('invoices.home') }}">uploadu</a>.</p>
+    {% endif %}
+  </div>
+
+  <p><a class="text-indigo-600 underline" href="{{ url_for('invoices.master') }}">Baza materiałowa</a></p>
+</div>
+{% endblock %}

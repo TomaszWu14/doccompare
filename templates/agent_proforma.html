@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+{% block title %}Agent weryfikacji pro-formy — DocCompare{% endblock %}
+{% block extra_head %}
+<style>
+  .agent-wrap { max-width: 820px; margin: 0 auto; padding: 0 0 40px; }
+  .sub { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
+
+  /* Steps */
+  .steps { display: flex; align-items: center; gap: 0; margin-bottom: 32px; }
+  .step { display: flex; flex-direction: column; align-items: center; flex: 1; position: relative; }
+  .step-circle {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; border: 2px solid var(--border);
+    background: var(--surface); color: var(--muted); z-index: 1;
+    transition: all .25s;
+  }
+  .step.active .step-circle { border-color: var(--accent); color: var(--accent); background: rgba(91,155,255,.1); }
+  .step.done .step-circle { border-color: var(--ok); background: rgba(61,219,160,.15); color: var(--ok); }
+  .step-label { font-size: 11px; color: var(--muted); margin-top: 6px; text-align: center; white-space: nowrap; }
+  .step.active .step-label, .step.done .step-label { color: var(--text); }
+  .step-line { flex: 1; height: 2px; background: var(--border); margin-top: -20px; }
+  .step-line.done { background: var(--ok); }
+
+  /* Upload */
+  .upload-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 28px 24px; margin-bottom: 20px;
+  }
+  .drop {
+    border: 2px dashed var(--border); border-radius: 10px;
+    padding: 48px 24px; text-align: center; cursor: pointer;
+    transition: border-color .2s, background .2s; position: relative;
+    margin-bottom: 18px;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: rgba(91,155,255,.04); }
+  .drop.has { border-color: var(--ok); border-style: solid; }
+  .drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { font-size: 32px; margin-bottom: 10px; }
+  .drop-label { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .drop-sub { font-size: 12px; color: var(--muted); }
+  .drop-name { font-family: var(--mono); font-size: 12px; color: var(--ok); margin-top: 10px; word-break: break-all; }
+
+  .btn-run {
+    width: 100%; background: var(--accent); color: #fff; border: none;
+    border-radius: 8px; padding: 13px; font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: opacity .2s;
+  }
+  .btn-run:hover { opacity: .88; }
+  .btn-run:disabled { opacity: .35; cursor: not-allowed; }
+
+  /* Loader */
+  .loader { display: none; text-align: center; padding: 48px 0; }
+  .loader.on { display: block; }
+  .spin { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .75s linear infinite; margin: 0 auto 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader-text { font-size: 14px; color: var(--muted); }
+
+  /* Result cards */
+  .result-card { display: none; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .result-card.on { display: block; }
+
+  .card-ok { background: rgba(61,219,160,.08); border: 1px solid rgba(61,219,160,.35); border-left: 4px solid var(--ok); }
+  .card-error { background: rgba(255,92,92,.07); border: 1px solid rgba(255,92,92,.3); border-left: 4px solid var(--error); }
+  .card-warn { background: rgba(255,179,71,.07); border: 1px solid rgba(255,179,71,.3); border-left: 4px solid var(--warn); }
+
+  .card-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .card-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .info-item { background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  .info-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-family: var(--mono); margin-bottom: 4px; }
+  .info-value { font-size: 14px; font-weight: 600; font-family: var(--mono); word-break: break-all; }
+  .info-value.ok { color: var(--ok); }
+  .info-value.err { color: var(--error); }
+  .info-value.warn { color: var(--warn); }
+
+  .emails-row { font-size: 12px; color: var(--muted); margin-top: 12px; }
+  .emails-row strong { color: var(--text); }
+
+  /* Discrepancy table */
+  .disc-title { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); font-family: var(--mono); margin: 18px 0 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 7px 10px; font-size: 10px; font-family: var(--mono); letter-spacing: 1px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surface); white-space: nowrap; }
+  td { padding: 7px 10px; border-bottom: 1px solid rgba(42,45,58,.35); vertical-align: top; }
+  tr:hover td { background: rgba(255,255,255,.016); }
+  .badge-err { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; background: rgba(255,92,92,.15); color: var(--error); font-family: var(--mono); }
+  .badge-warn { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; background: rgba(255,179,71,.15); color: var(--warn); font-family: var(--mono); }
+
+  /* Not-found */
+  .btn-secondary { display: inline-block; padding: 9px 20px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); font-size: 13px; text-decoration: none; margin-top: 14px; transition: background .15s; }
+  .btn-secondary:hover { background: var(--surface); }
+  .code-box { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--accent); margin: 8px 0; }
+
+  .reset-btn { margin-top: 16px; background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 8px 18px; font-size: 13px; cursor: pointer; }
+  .reset-btn:hover { border-color: var(--text); color: var(--text); }
+</style>
+{% endblock %}
+{% block page_title %}Agent proforma{% endblock %}
+
+{% block content %}
+<div class="agent-wrap">
+  <div class="page-header">
+    <h1>🤖 Agent weryfikacji pro-formy</h1>
+    <p class="sub">Wgraj pro-formę — agent automatycznie znajdzie PO w bibliotece, porówna dokumenty i wyśle powiadomienie email do Ciebie i działu zakupów.</p>
+  </div>
+
+  <!-- Step indicator -->
+  <div class="steps" id="stepIndicator">
+    <div class="step active" id="step1">
+      <div class="step-circle">1</div>
+      <div class="step-label">📤 Wgraj pro-formę</div>
+    </div>
+    <div class="step-line" id="line1"></div>
+    <div class="step" id="step2">
+      <div class="step-circle">2</div>
+      <div class="step-label">🔍 Weryfikacja</div>
+    </div>
+    <div class="step-line" id="line2"></div>
+    <div class="step" id="step3">
+      <div class="step-circle">3</div>
+      <div class="step-label">📧 Powiadomienie</div>
+    </div>
+  </div>
+
+  <!-- Upload card -->
+  <div class="upload-card" id="uploadSection">
+    <div class="drop" id="dropZone" role="button" tabindex="0"
+         aria-label="Wgraj pro-formę — kliknij lub przeciągnij plik PDF"
+         onkeydown="if(event.key==='Enter'||event.key===' '){document.getElementById('fileInput').click()}">
+      <input type="file" id="fileInput" accept=".pdf,application/pdf" aria-label="Wybierz plik PDF pro-formy">
+      <div class="drop-icon" aria-hidden="true">📄</div>
+      <div class="drop-label">Przeciągnij pro-formę lub kliknij</div>
+      <div class="drop-sub">PDF, maksymalnie 25 MB</div>
+      <div class="drop-name" id="fileName" style="display:none"></div>
+    </div>
+    <button type="button" class="btn-run" id="runBtn" disabled onclick="runAgent()">▶ Uruchom agenta</button>
+  </div>
+
+  <!-- Loader -->
+  <div class="loader" id="loader">
+    <div class="spin"></div>
+    <div class="loader-text">Agent analizuje pro-formę…<br><span style="font-size:11px;opacity:.6">Ekstrakcja numeru PO → wyszukanie w bibliotece → porównanie → email</span></div>
+  </div>
+
+  <!-- Result: OK -->
+  <div class="result-card card-ok" id="resultOk" aria-live="polite" aria-atomic="true">
+    <div class="card-title text-ok">✅ Pro-forma zgodna z PO</div>
+    <div class="card-sub">Wszystkie pozycje są zgodne. Zamówienie można realizować.</div>
+    <div class="info-grid" id="gridOk"></div>
+    <div class="emails-row" id="emailsOk"></div>
+    <button type="button" class="reset-btn" onclick="resetAgent()">⟳ Sprawdź kolejną pro-formę</button>
+  </div>
+
+  <!-- Result: Error -->
+  <div class="result-card card-error" id="resultError">
+    <div class="card-title text-err">⚠️ Wykryto rozbieżności</div>
+    <div class="card-sub">Pro-forma nie jest zgodna z PO. Nie można realizować zamówienia bez wyjaśnienia różnic.</div>
+    <div class="info-grid" id="gridError"></div>
+    <div class="disc-title">Rozbieżności</div>
+    <table id="discTable">
+      <thead><tr><th scope="col">Pole</th><th scope="col">Wartość PO</th><th scope="col">Wartość PI</th><th scope="col">Opis</th><th scope="col">Poziom</th></tr></thead>
+      <tbody id="discBody"></tbody>
+    </table>
+    <div class="emails-row" id="emailsError"></div>
+    <button type="button" class="reset-btn" onclick="resetAgent()">⟳ Sprawdź kolejną pro-formę</button>
+  </div>
+
+  <!-- Result: Not found -->
+  <div class="result-card card-warn" id="resultNotFound">
+    <div class="card-title text-warn">🔍 Nie znaleziono PO</div>
+    <div class="card-sub">Agent wykrył numer zamówienia:</div>
+    <div class="code-box" id="notFoundPo"></div>
+    <p style="font-size:13px;color:var(--muted)">Wgraj plik PO do dostawy (moduł Dostawy → dodaj dokument PO) albo do biblioteki dokumentów.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <a href="/dostawy" class="btn-secondary">🚢 Przejdź do dostaw</a>
+      <a href="/library" class="btn-secondary">📚 Biblioteka</a>
+    </div>
+    <br>
+    <button type="button" class="reset-btn" onclick="resetAgent()">⟳ Spróbuj ponownie</button>
+  </div>
+
+  <!-- Result: Generic error -->
+  <div class="result-card card-error" id="resultGenError">
+    <div class="card-title text-err">❌ Błąd</div>
+    <div class="card-sub" id="genErrorMsg"></div>
+    <button type="button" class="reset-btn" onclick="resetAgent()">⟳ Spróbuj ponownie</button>
+  </div>
+</div>
+
+<script>
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+const fileInput = document.getElementById('fileInput');
+const dropZone  = document.getElementById('dropZone');
+const fileNameEl = document.getElementById('fileName');
+const runBtn    = document.getElementById('runBtn');
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) setFile(fileInput.files[0]);
+});
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f) { fileInput._file = f; setFile(f); }
+});
+
+function setFile(f) {
+  dropZone.classList.add('has');
+  fileNameEl.textContent = f.name + ' (' + (f.size / 1024 / 1024).toFixed(2) + ' MB)';
+  fileNameEl.style.display = 'block';
+  runBtn.disabled = false;
+}
+
+function setStep(active) {
+  [1,2,3].forEach(i => {
+    const s = document.getElementById('step' + i);
+    s.classList.remove('active','done');
+    if (i < active) s.classList.add('done');
+    else if (i === active) s.classList.add('active');
+  });
+  [1,2].forEach(i => {
+    const l = document.getElementById('line' + i);
+    l.classList.toggle('done', i < active);
+  });
+}
+
+function hideResults() {
+  ['resultOk','resultError','resultNotFound','resultGenError'].forEach(id => {
+    document.getElementById(id).classList.remove('on');
+  });
+}
+
+function resetAgent() {
+  hideResults();
+  document.getElementById('uploadSection').style.display = '';
+  setStep(1);
+  dropZone.classList.remove('has');
+  fileNameEl.style.display = 'none';
+  fileNameEl.textContent = '';
+  runBtn.disabled = true;
+  fileInput.value = '';
+  fileInput._file = null;
+}
+
+function infoItem(label, value, cls) {
+  return `<div class="info-item">
+    <div class="info-label">${esc(label)}</div>
+    <div class="info-value${cls ? ' ' + esc(cls) : ''}">${esc(String(value ?? ''))}</div>
+  </div>`;
+}
+
+function emailsHtml(sent, errs) {
+  if (!sent || !sent.length) return '';
+  let html = '<strong>📧 Email wysłany do:</strong> ' + sent.map(esc).join(', ');
+  if (errs && errs.length) html += ' &nbsp;|&nbsp; <span style="color:var(--warn)">Błąd wysyłki: ' + errs.map(esc).join(', ') + '</span>';
+  return html;
+}
+
+async function runAgent() {
+  const f = fileInput._file || fileInput.files[0];
+  if (!f) return;
+
+  document.getElementById('uploadSection').style.display = 'none';
+  hideResults();
+  document.getElementById('loader').classList.add('on');
+  setStep(2);
+
+  const fd = new FormData();
+  fd.append('proforma', f);
+
+  let data;
+  try {
+    const resp = await fetch('/api/agent/proforma-check', { method: 'POST', body: fd });
+    data = await resp.json();
+    if (!resp.ok && !data.po_number) {
+      throw { message: data.error || 'Nieznany błąd serwera' };
+    }
+    if (!resp.ok && data.po_number === undefined) {
+      // 404 without po_number = real error
+      throw { message: data.error || 'Nieznany błąd' };
+    }
+  } catch (err) {
+    document.getElementById('loader').classList.remove('on');
+    setStep(1);
+    document.getElementById('uploadSection').style.display = '';
+    document.getElementById('genErrorMsg').textContent = err.message || String(err);
+    document.getElementById('resultGenError').classList.add('on');
+    return;
+  }
+
+  document.getElementById('loader').classList.remove('on');
+  setStep(3);
+
+  // Not found in library
+  if (data.error && data.po_number) {
+    document.getElementById('notFoundPo').textContent = data.po_number;
+    document.getElementById('resultNotFound').classList.add('on');
+    return;
+  }
+
+  // Generic error without po_number
+  if (data.error) {
+    document.getElementById('genErrorMsg').textContent = data.error;
+    document.getElementById('resultGenError').classList.add('on');
+    return;
+  }
+
+  const grid = infoItem('Numer PO', data.po_number || '—', 'ok')
+    + infoItem('Pro-forma', data.proforma_file || f.name, '')
+    + infoItem('PO z biblioteki', data.po_file || '—', '')
+    + (data.status === 'ok'
+        ? infoItem('Pozycji zgodnych', data.ok_count ?? '—', 'ok')
+        : infoItem('Błędów', data.diff_count ?? 0, 'err') + infoItem('Ostrzeżeń', data.warn_count ?? 0, 'warn'));
+
+  if (data.status === 'ok') {
+    document.getElementById('gridOk').innerHTML = grid;
+    document.getElementById('emailsOk').innerHTML = emailsHtml(data.emails_sent, data.email_errors);
+    document.getElementById('resultOk').classList.add('on');
+  } else {
+    document.getElementById('gridError').innerHTML = grid;
+
+    // Build discrepancy table
+    const tbody = document.getElementById('discBody');
+    tbody.innerHTML = '';
+    const findings = data.findings || [];
+    const items = data.items_with_issues || [];
+
+    findings.forEach(f => {
+      const sev = f.severity === 'error' ? 'badge-err' : 'badge-warn';
+      const sevLabel = f.severity === 'error' ? 'Błąd' : 'Ostrzeżenie';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(f.field_name)||'—'}</td><td>${esc(f.val_a)||'—'}</td><td>${esc(f.val_b)||'—'}</td><td>${esc(f.description)||'—'}</td><td><span class="${sev}">${sevLabel}</span></td>`;
+      tbody.appendChild(tr);
+    });
+
+    items.forEach(it => {
+      const issues = (it.issues || []).join('; ');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(it.ref||it.desc_a)||'—'}</td><td>${esc(String(it.qty_a??''))} / ${esc(String(it.price_a??''))}</td><td>${esc(String(it.qty_b??''))} / ${esc(String(it.price_b??''))}</td><td>${esc(issues)}</td><td><span class="badge-err">Błąd</span></td>`;
+      tbody.appendChild(tr);
+    });
+
+    if (findings.length === 0 && items.length === 0) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="5" style="color:var(--muted);text-align:center">Brak szczegółów rozbieżności</td>';
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById('emailsError').innerHTML = emailsHtml(data.emails_sent, data.email_errors);
+    document.getElementById('resultError').classList.add('on');
+  }
+}
+</script>
+{% endblock %}

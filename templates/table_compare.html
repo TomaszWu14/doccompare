@@ -1,0 +1,1103 @@
+{% extends "base.html" %}
+{% block title %}Porównanie dokumentów — DocCompare{% endblock %}
+{% block extra_head %}
+<style>
+*,*::before,*::after { box-sizing: border-box; }
+body { background: #f1f5f9 !important; }
+.layout-main { background: #f1f5f9 !important; }
+.sub { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+
+/* ── Cards ── */
+.card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.04);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.card-pad { padding: 20px 24px; }
+
+/* ── Upload ── */
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.drop {
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+  position: relative;
+}
+.drop:hover, .drop.over { border-color: #3b82f6; background: #eff6ff; }
+.drop.has { border-color: #16a34a; border-style: solid; background: #f0fdf4; }
+.drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.drop-icon { font-size: 26px; margin-bottom: 8px; }
+.drop-label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 3px; }
+.drop-sub { font-size: 12px; color: #9ca3af; }
+.drop-name { font-family: monospace; font-size: 12px; color: #16a34a; margin-top: 7px; word-break: break-all; font-weight: 600; }
+
+.btn-run {
+  background: #1d4ed8;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 28px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn-run:hover { background: #1e40af; }
+.btn-run:disabled { background: #93c5fd; cursor: not-allowed; }
+
+/* ── Error / Loader ── */
+.err-box {
+  display: none;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 12px 18px;
+  color: #dc2626;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+.err-box.on { display: block; }
+.loader { display: none; text-align: center; padding: 40px; color: #64748b; font-size: 14px; }
+.loader.on { display: block; }
+.spin {
+  width: 28px; height: 28px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #1d4ed8;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Results ── */
+.results { display: none; }
+.results.on { display: block; }
+
+/* ── Risk header bar ── */
+.risk-header {
+  border-radius: 12px;
+  padding: 14px 22px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.risk-header.rh-ok   { background: #14532d; }
+.risk-header.rh-warn { background: #78350f; }
+.risk-header.rh-err  { background: #7f1d1d; }
+.rh-brand { font-size: 15px; font-weight: 800; color: #fff; letter-spacing: .3px; }
+.rh-sep   { width: 1px; height: 22px; background: rgba(255,255,255,.25); }
+.rh-badge {
+  padding: 4px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+}
+.rh-badge.ok   { background: #dcfce7; color: #14532d; }
+.rh-badge.warn { background: #fef3c7; color: #78350f; }
+.rh-badge.err  { background: #fee2e2; color: #7f1d1d; }
+.rh-meta { font-size: 12px; color: rgba(255,255,255,.65); margin-left: auto; }
+
+/* ── Doc cards ── */
+.doc-cards-row {
+  display: grid;
+  grid-template-columns: 1fr 56px 1fr;
+  gap: 0;
+  margin-bottom: 14px;
+  align-items: stretch;
+}
+.doc-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px 18px;
+  border: 1.5px solid #e2e8f0;
+}
+.doc-card.card-a { border-color: #3b82f6; border-left: 4px solid #3b82f6; }
+.doc-card.card-b { border-color: #22c55e; border-left: 4px solid #22c55e; }
+.doc-card-type {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+.doc-card.card-a .doc-card-type { color: #3b82f6; }
+.doc-card.card-b .doc-card-type { color: #22c55e; }
+.doc-card-file { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 8px; word-break: break-all; }
+.doc-card-row { display: flex; gap: 6px; font-size: 12px; margin-bottom: 3px; }
+.doc-card-key { color: #94a3b8; min-width: 70px; flex-shrink: 0; }
+.doc-card-val { color: #1e293b; font-weight: 600; }
+.vs-sep {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: #94a3b8;
+}
+
+/* ── KPI tiles ── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.kpi-tile {
+  background: #fff;
+  border-radius: 10px;
+  padding: 14px 12px 12px;
+  text-align: center;
+  border: 1.5px solid #e2e8f0;
+  border-bottom-width: 3px;
+  position: relative;
+}
+.kpi-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #94a3b8; margin-bottom: 6px; }
+.kpi-value { font-size: 22px; font-weight: 800; color: #0f172a; line-height: 1; }
+.kpi-sub   { font-size: 10px; color: #94a3b8; margin-top: 4px; }
+
+.kpi-total  { border-bottom-color: #94a3b8; }
+.kpi-ok     { border-bottom-color: #22c55e; }
+.kpi-ok .kpi-value { color: #16a34a; }
+.kpi-diff   { border-bottom-color: #f87171; }
+.kpi-diff .kpi-value { color: #dc2626; }
+.kpi-net-a  { border-bottom-color: #3b82f6; }
+.kpi-net-b  { border-bottom-color: #22c55e; }
+.kpi-delta  { border-bottom-color: #f59e0b; }
+.kpi-delta .kpi-value { color: #b45309; }
+.kpi-delta.kpi-delta-ok .kpi-value { color: #16a34a; }
+
+/* ── Score ring ── */
+.score-ring-wrap { display: flex; align-items: center; gap: 8px; justify-content: center; }
+.score-circle {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800;
+}
+.sc-good { background: #dcfce7; color: #15803d; }
+.sc-warn { background: #fef3c7; color: #b45309; }
+.sc-bad  { background: #fee2e2; color: #dc2626; }
+
+/* ── AI box ── */
+.ai-box {
+  display: none;
+  background: #f0f4ff;
+  border: 1px solid #c7d4f8;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 14px;
+}
+
+/* ── Divergence cards ── */
+.div-section { margin-bottom: 14px; }
+.sec-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #64748b;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sec-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0;
+}
+.div-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.div-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-top-width: 3px;
+  position: relative;
+}
+.div-card.sev-critical { border-top-color: #dc2626; background: #fff5f5; }
+.div-card.sev-major    { border-top-color: #ea580c; background: #fff8f4; }
+.div-card.sev-info     { border-top-color: #0284c7; background: #f0f9ff; }
+.div-sev {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  margin-bottom: 4px;
+}
+.sev-critical .div-sev { color: #dc2626; }
+.sev-major    .div-sev { color: #ea580c; }
+.sev-info     .div-sev { color: #0284c7; }
+.div-title { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 6px; font-family: monospace; }
+.div-before { font-size: 11px; color: #94a3b8; margin-bottom: 2px; }
+.div-before s { color: #94a3b8; }
+.div-after  { font-size: 13px; font-weight: 700; color: #0f172a; }
+.div-detail { font-size: 11px; color: #64748b; margin-top: 5px; border-top: 1px solid rgba(0,0,0,.06); padding-top: 5px; }
+
+/* ── Main result card ── */
+.result-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+/* ── Filter bar ── */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+.filter-bar .fl-label { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-right: 4px; }
+.fbtn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.fbtn:hover { border-color: #94a3b8; color: #1e293b; }
+.fbtn.active-all  { background: #1e293b; border-color: #1e293b; color: #fff; }
+.fbtn.active-err  { background: #fef2f2; border-color: #dc2626; color: #dc2626; }
+.fbtn.active-warn { background: #fffbeb; border-color: #d97706; color: #b45309; }
+.fbtn.active-fmt  { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+.fbtn.active-ok   { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
+.filter-export { margin-left: auto; display: flex; gap: 6px; }
+.btn-export {
+  font-size: 12px; font-weight: 600; color: #475569;
+  border: 1px solid #cbd5e1; background: #fff;
+  border-radius: 6px; padding: 4px 12px;
+  cursor: pointer; text-decoration: none; transition: all .15s;
+}
+.btn-export:hover { border-color: #64748b; color: #0f172a; }
+
+/* ── Section title ── */
+.sec-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #64748b;
+  padding: 12px 20px 6px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sec-title-count {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+/* ── Tables ── */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: #475569;
+  background: #f8fafc;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+}
+td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+  color: #1e293b;
+}
+tbody tr:nth-child(even) td { background: #fafafa; }
+tbody tr:nth-child(odd) td  { background: #fff; }
+
+/* Status row backgrounds */
+.row-roznica td  { background: #fef2f2 !important; }
+.row-brak_w_a td,
+.row-brak_w_b td { background: #fff8f0 !important; }
+.row-format td   { background: #eff6ff !important; }
+.row-ok td       { background: #fff !important; }
+
+/* Left indicator */
+.row-roznica  td:first-child { border-left: 3px solid #dc2626; }
+.row-brak_w_a td:first-child,
+.row-brak_w_b td:first-child { border-left: 3px solid #ea580c; }
+.row-format   td:first-child { border-left: 3px solid #3b82f6; }
+.row-ok       td:first-child { border-left: 3px solid #22c55e; }
+
+/* Cell-level diff */
+.cell-diff { color: #dc2626 !important; font-weight: 700 !important; }
+.cell-null { color: #c4c9d4; font-style: italic; font-size: 12px; }
+.cell-mono { font-family: monospace; font-weight: 600; }
+.cell-delta-pos { color: #dc2626; font-weight: 700; font-family: monospace; }
+.cell-delta-neg { color: #16a34a; font-weight: 700; font-family: monospace; }
+.cell-delta-zero { color: #94a3b8; font-family: monospace; }
+
+/* Status badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.badge-ok      { background: #dcfce7; color: #15803d; border-color: #86efac; }
+.badge-err     { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+.badge-warn    { background: #fef3c7; color: #b45309; border-color: #fde68a; }
+.badge-fmt     { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
+.badge-miss    { background: #fce7f3; color: #be185d; border-color: #f9a8d4; }
+
+/* ST column */
+.st-ok   { color: #16a34a; font-size: 15px; font-weight: 700; }
+.st-err  { color: #dc2626; font-size: 15px; font-weight: 700; }
+.st-warn { color: #d97706; font-size: 15px; font-weight: 700; }
+.st-fmt  { color: #1d4ed8; font-size: 15px; font-weight: 700; }
+
+/* Issue explanations */
+.issues-block { margin-top: 4px; }
+.issue-line {
+  display: flex; align-items: flex-start;
+  gap: 4px; font-size: 11px; padding: 1px 0; line-height: 1.4;
+}
+.issue-err  { color: #dc2626; }
+.issue-warn { color: #b45309; }
+.issue-fmt  { color: #1d4ed8; }
+
+.desc-text { font-size: 12px; color: #475569; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.ref-code  { font-family: monospace; font-weight: 700; color: #0f172a; font-size: 13px; }
+
+/* Totals row in items table */
+.row-total td { background: #f1f5f9 !important; font-weight: 700; border-top: 2px solid #cbd5e1; }
+
+tr.hidden-row { display: none; }
+
+/* ── Financial reconciliation ── */
+.fin-bar { margin: 0 20px 16px; }
+.fin-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.fin-label { font-size: 11px; color: #64748b; width: 130px; flex-shrink: 0; font-weight: 600; }
+.fin-track { flex: 1; background: #f1f5f9; border-radius: 4px; height: 18px; overflow: hidden; }
+.fin-fill-a { background: linear-gradient(90deg,#3b82f6,#60a5fa); height: 100%; border-radius: 4px; transition: width .5s; }
+.fin-fill-b { background: linear-gradient(90deg,#22c55e,#4ade80); height: 100%; border-radius: 4px; transition: width .5s; }
+.fin-val { font-size: 12px; font-weight: 700; color: #0f172a; min-width: 110px; text-align: right; font-family: monospace; }
+.fin-diff-row { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px dashed #e2e8f0; }
+.fin-diff-label { font-size: 11px; color: #64748b; width: 130px; flex-shrink: 0; font-weight: 600; }
+.fin-diff-val { font-size: 15px; font-weight: 800; font-family: monospace; }
+.fin-diff-pct { font-size: 12px; color: #94a3b8; margin-left: 8px; }
+
+/* Alert banner */
+.alert-banner {
+  border-radius: 10px;
+  padding: 14px 20px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.alert-banner.alert-err  { background: #fff5f5; border: 1.5px solid #fca5a5; }
+.alert-banner.alert-warn { background: #fffbeb; border: 1.5px solid #fde68a; }
+.alert-banner.alert-ok   { background: #f0fdf4; border: 1.5px solid #86efac; }
+.alert-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+.alert-title { font-size: 14px; font-weight: 800; margin-bottom: 4px; }
+.alert-err  .alert-title { color: #991b1b; }
+.alert-warn .alert-title { color: #92400e; }
+.alert-ok   .alert-title { color: #14532d; }
+.alert-body { font-size: 12px; color: #475569; line-height: 1.6; }
+
+/* Score KPI (first tile, prominent) */
+.kpi-grid { grid-template-columns: 180px repeat(6, 1fr); }
+.kpi-score {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%);
+  border: none;
+  border-radius: 12px;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  grid-row: span 1;
+}
+.kpi-score .kpi-label { color: rgba(255,255,255,.7); font-size: 9px; }
+.kpi-score .kpi-value { font-size: 36px; font-weight: 900; color: #fff; line-height: 1.05; }
+.kpi-score .kpi-sub   { font-size: 11px; color: rgba(255,255,255,.6); margin-top: 2px; }
+.kpi-score.score-ok   { background: linear-gradient(135deg, #14532d 0%, #16a34a 100%); }
+.kpi-score.score-warn { background: linear-gradient(135deg, #78350f 0%, #d97706 100%); }
+.kpi-score.score-err  { background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%); }
+
+/* Divergence section - full-width stacked cards */
+.div-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.div-card {
+  border-radius: 10px;
+  padding: 14px 18px;
+  border-left-width: 5px !important;
+  border-left-style: solid !important;
+  border-top-width: 1px !important;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff !important;
+}
+.div-card.sev-critical { border-left-color: #dc2626 !important; background: #fff8f8 !important; }
+.div-card.sev-major    { border-left-color: #ea580c !important; background: #fff9f5 !important; }
+.div-card.sev-info     { border-left-color: #0284c7 !important; background: #f8fbff !important; }
+.div-card-hdr { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.div-arrow-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; flex-wrap: wrap; }
+.div-arrow-box {
+  display: flex; align-items: center; gap: 8px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 7px; padding: 6px 12px;
+}
+.div-arrow-label { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; }
+.div-arrow-val   { font-size: 15px; font-weight: 800; font-family: monospace; }
+.div-arrow-a .div-arrow-val { color: #1e3a8a; }
+.div-arrow-b .div-arrow-val { color: #7f1d1d; }
+.div-arrow-icon { font-size: 18px; color: #94a3b8; flex-shrink: 0; }
+.div-delta-chip {
+  font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px;
+  background: #fee2e2; color: #dc2626;
+}
+.div-delta-chip.pos { background: #fee2e2; color: #dc2626; }
+.div-delta-chip.neg { background: #dcfce7; color: #15803d; }
+
+/* Grouped column headers for items table */
+.th-group-po  { background: #eff6ff !important; color: #1e3a8a !important; text-align: center; }
+.th-group-pi  { background: #f0fdf4 !important; color: #14532d !important; text-align: center; }
+.th-sub-po    { background: #f8fafc !important; }
+.th-sub-pi    { background: #f8fafc !important; }
+thead tr:first-child th { border-bottom: 1px solid #e2e8f0; }
+
+/* 4-column header table */
+.hdr-comment { font-size: 11px; color: #64748b; font-weight: 400; margin-top: 2px; }
+</style>
+{% endblock %}
+
+{% block page_title %}Porównanie tabelaryczne{% endblock %}
+
+{% block content %}
+{% include '_compare_modes.html' %}
+<div class="page-header">
+  <h1>📋 Porównanie dokumentów</h1>
+  <p class="sub">Ekstrakcja tabel z PDF — PO, PI, WZ, CMR, Packing List. Dane liczbowe i tekstowe weryfikowane pole po polu.</p>
+</div>
+
+<!-- Upload card -->
+<div class="card card-pad">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <label for="tplSel" style="font-size:12px;color:#64748b;font-weight:600;white-space:nowrap">SZABLON:</label>
+    <select id="tplSel" onchange="applyTemplate(this.value)"
+      style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;padding:6px 12px;color:#374151;font-size:13px;outline:none;min-width:200px">
+      <option value="">— wybierz szablon —</option>
+    </select>
+    <span id="tplApplied" style="display:none;font-size:11px;color:#16a34a;font-weight:600">✓ Szablon zastosowany</span>
+  </div>
+
+  <div class="upload-grid">
+    <div class="drop" id="za">
+      <input type="file" id="fa" accept=".pdf">
+      <div class="drop-icon">📄</div>
+      <div class="drop-label">Dokument A</div>
+      <div class="drop-sub">PO / PI / WZ — przeciągnij lub kliknij</div>
+      <div class="drop-name" id="na"></div>
+    </div>
+    <div class="drop" id="zb">
+      <input type="file" id="fb" accept=".pdf">
+      <div class="drop-icon">📄</div>
+      <div class="drop-label">Dokument B</div>
+      <div class="drop-sub">PI / PL / CMR — przeciągnij lub kliknij</div>
+      <div class="drop-name" id="nb"></div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <button type="button" class="btn-run" id="btnRun" onclick="run()">Analizuj dokumenty →</button>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#374151;user-select:none">
+      <input type="checkbox" id="useAI" checked style="width:15px;height:15px;accent-color:#1d4ed8">
+      <span>🤖 Walidacja AI <span style="font-size:11px;color:#9ca3af">(+5–10 s)</span></span>
+    </label>
+  </div>
+</div>
+
+<div class="err-box" id="errBox"></div>
+<div class="loader" id="ldr">
+  <div class="spin"></div>
+  <span class="ldr-text" style="display:block;margin-top:8px">Analizuję dokumenty…</span>
+</div>
+
+<!-- ══════════════════════ RESULTS ══════════════════════ -->
+<div class="results" id="res" aria-live="polite" aria-atomic="false">
+
+  <!-- AI report -->
+  <div class="ai-box" id="aiReport">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:16px" aria-hidden="true">🤖</span>
+      <strong style="font-size:13px;color:#0f172a">Raport AI</strong>
+      <span id="aiRisk" style="font-size:11px;padding:2px 10px;border-radius:20px;font-weight:700;margin-left:4px"></span>
+      <span id="aiRiskChanged" style="font-size:11px;color:#d97706;display:none;font-weight:600">⚠ AI koryguje ocenę silnika</span>
+    </div>
+    <div id="aiSummary" style="font-size:13px;line-height:1.65;color:#374151"></div>
+    <div id="aiCritical" style="margin-top:10px;display:none">
+      <div style="font-size:11px;font-weight:700;color:#dc2626;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Do natychmiastowego działania:</div>
+      <div id="aiCriticalList" style="font-size:12px;line-height:1.7"></div>
+    </div>
+  </div>
+
+  <!-- Risk header bar -->
+  <div class="risk-header" id="riskHeader">
+    <span class="rh-brand">DocCompare</span>
+    <div class="rh-sep"></div>
+    <span class="rh-badge" id="riskBadge"></span>
+    <span id="scoreChip" style="font-size:13px;font-weight:700;color:rgba(255,255,255,.85)"></span>
+    <span class="rh-meta" id="riskMeta"></span>
+  </div>
+
+  <!-- Document cards -->
+  <div class="doc-cards-row">
+    <div class="doc-card card-a" id="docCardA"></div>
+    <div class="vs-sep">VS</div>
+    <div class="doc-card card-b" id="docCardB"></div>
+  </div>
+
+  <!-- Alert banner -->
+  <div id="alertBanner" style="display:none"></div>
+
+  <!-- KPI tiles -->
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <!-- Kluczowe rozbieżności -->
+  <div class="div-section" id="divSection" style="display:none">
+    <div class="sec-header">Kluczowe rozbieżności <span id="divCount" class="sec-title-count"></span></div>
+    <div class="div-cards-grid" id="divGrid"></div>
+  </div>
+
+  <!-- Main result card: filter + tables -->
+  <div class="result-card">
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <span class="fl-label">Filtr:</span>
+      <button type="button" class="fbtn active-all" data-f="all" onclick="setF('all',this)">Wszystkie</button>
+      <button type="button" class="fbtn" data-f="err" onclick="setF('err',this)">❌ Błędy</button>
+      <button type="button" class="fbtn" data-f="warn" onclick="setF('warn',this)">⚠ Wątpliwe</button>
+      <button type="button" class="fbtn" data-f="fmt" onclick="setF('fmt',this)">🔵 Format</button>
+      <button type="button" class="fbtn" data-f="ok" onclick="setF('ok',this)">✅ Zgodne</button>
+      <div class="filter-export" id="exportBtns"></div>
+    </div>
+
+    <!-- Header fields -->
+    <div class="sec-title">
+      Pola nagłówkowe dokumentów
+      <span class="sec-title-count" id="hCount"></span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col" style="width:22%">Pole</th>
+            <th scope="col" style="width:30%" class="th-group-po">ZAMÓWIENIE (A)</th>
+            <th scope="col" style="width:30%" class="th-group-pi">PROFORMA (B)</th>
+            <th scope="col" style="width:18%">Status</th>
+          </tr>
+        </thead>
+        <tbody id="hBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Items -->
+    <div class="sec-title">
+      Pozycje towarowe
+      <span class="sec-title-count" id="iCount"></span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col" rowspan="2" style="width:28px;text-align:center">ST</th>
+            <th scope="col" rowspan="2" style="width:9%">Kod REF</th>
+            <th scope="col" rowspan="2" style="width:20%">Opis</th>
+            <th scope="col" colspan="2" class="th-group-po">ZAMÓWIENIE (PO)</th>
+            <th scope="col" colspan="3" class="th-group-pi">PROFORMA (PI)</th>
+            <th scope="col" rowspan="2" style="width:8%;text-align:right">Δ WARTOŚĆ</th>
+          </tr>
+          <tr>
+            <th scope="col" class="th-sub-po" style="width:8%;text-align:right">Ilość</th>
+            <th scope="col" class="th-sub-po" style="width:8%;text-align:right">Wartość</th>
+            <th scope="col" class="th-sub-pi" style="width:8%;text-align:right">Ilość</th>
+            <th scope="col" class="th-sub-pi" style="width:10%">LOT / Seria</th>
+            <th scope="col" class="th-sub-pi" style="width:8%;text-align:right">Wartość</th>
+          </tr>
+        </thead>
+        <tbody id="iBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Financial reconciliation -->
+    <div class="sec-title">Rozliczenie finansowe</div>
+    <div class="fin-bar" id="finBar"></div>
+
+    <div style="height:8px"></div>
+  </div>
+
+</div><!-- /results -->
+
+<script>
+// ── Drop zones ─────────────────────────────────────────────────────────────
+function setupDrop(zid, fid, nid) {
+  const z = document.getElementById(zid),
+        f = document.getElementById(fid),
+        n = document.getElementById(nid);
+  f.addEventListener('change', () => {
+    if (f.files[0]) { n.textContent = '✓ ' + f.files[0].name; z.classList.add('has'); }
+  });
+  z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('over'); });
+  z.addEventListener('dragleave', () => z.classList.remove('over'));
+  z.addEventListener('drop', e => {
+    e.preventDefault(); z.classList.remove('over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.name.toLowerCase().endsWith('.pdf')) {
+      const dt = new DataTransfer(); dt.items.add(file); f.files = dt.files;
+      n.textContent = '✓ ' + file.name; z.classList.add('has');
+    }
+  });
+}
+setupDrop('za', 'fa', 'na');
+setupDrop('zb', 'fb', 'nb');
+
+// ── Run ────────────────────────────────────────────────────────────────────
+async function run() {
+  const fa = document.getElementById('fa').files[0];
+  const fb = document.getElementById('fb').files[0];
+  const useAI = document.getElementById('useAI').checked;
+  if (!fa || !fb) { showErr('Wybierz dwa pliki PDF.'); return; }
+  document.getElementById('errBox').classList.remove('on');
+  document.getElementById('res').classList.remove('on');
+  document.getElementById('aiReport').style.display = 'none';
+  document.getElementById('ldr').classList.add('on');
+  document.getElementById('btnRun').disabled = true;
+  if (useAI) document.querySelector('.ldr-text').textContent = 'Analizuję dokumenty… (walidacja AI może potrwać kilka sekund)';
+  const fd = new FormData();
+  fd.append('file_a', fa);
+  fd.append('file_b', fb);
+  if (useAI) fd.append('use_ai', '1');
+  try {
+    const r = await fetch('/api/table_compare', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok || d.error) { showErr(d.error || 'Błąd serwera'); return; }
+    render(d, fa.name, fb.name);
+    if (d.ai_validation) renderAI(d.ai_validation, d.ai_adjusted_risk, d.ai_risk_changed);
+  } catch (e) { showErr('Błąd: ' + e.message); }
+  finally {
+    document.getElementById('ldr').classList.remove('on');
+    document.getElementById('btnRun').disabled = false;
+    document.querySelector('.ldr-text').textContent = 'Analizuję dokumenty…';
+  }
+}
+
+// ── AI ────────────────────────────────────────────────────────────────────
+function renderAI(ai, adjustedRisk, riskChanged) {
+  const box = document.getElementById('aiReport');
+  box.style.display = 'block';
+  const riskMap = { ok: ['OK','#dcfce7','#15803d'], warning: ['Ostrzeżenie','#fef3c7','#b45309'], error: ['Błąd','#fee2e2','#dc2626'] };
+  const [rl,rbg,rc] = riskMap[ai.overall_risk||'ok'] || riskMap['ok'];
+  const re = document.getElementById('aiRisk');
+  re.textContent = rl; re.style.background = rbg; re.style.color = rc;
+  if (riskChanged) document.getElementById('aiRiskChanged').style.display = 'inline';
+  document.getElementById('aiSummary').textContent = ai.report_pl || ai.overall_summary || '';
+  const critList = ai.critical_errors || ai.critical_items || [];
+  if (critList.length > 0) {
+    document.getElementById('aiCritical').style.display = 'block';
+    document.getElementById('aiCriticalList').innerHTML =
+      critList.map(c => `<div style="color:#dc2626;padding:2px 0">❌ ${esc(c)}</div>`).join('');
+  }
+}
+
+// ── Main render ────────────────────────────────────────────────────────────
+function render(d, nameA, nameB) {
+  const risk = d.risk_level || 'ok';
+  const items   = d.items   || [];
+  const headers = d.headers || [];
+  const nTotal  = items.length;
+  const nOk     = items.filter(i => i.status === 'ok').length;
+  const nDiff   = items.filter(i => ['roznica','brak_w_a','brak_w_b'].includes(i.status)).length;
+  const scorePct = nTotal > 0 ? (nOk / nTotal * 100).toFixed(1) : '—';
+
+  // ── Risk header bar ─────────────────────────────────────────────────────
+  const hdr = document.getElementById('riskHeader');
+  hdr.className = 'risk-header ' + ({ ok:'rh-ok', ostrzezenie:'rh-warn', blad:'rh-err' }[risk] || 'rh-warn');
+  const badgeEl = document.getElementById('riskBadge');
+  const badgeMap = { ok:['ZGODNE','ok'], ostrzezenie:['WYMAGA WERYFIKACJI','warn'], blad:['BŁĘDY KRYTYCZNE','err'], format:['RÓŻNICE FORMATU','fmt'] };
+  const [bl, bc] = badgeMap[risk] || badgeMap['ostrzezenie'];
+  badgeEl.textContent = bl; badgeEl.className = 'rh-badge ' + bc;
+  document.getElementById('scoreChip').textContent = nTotal > 0 ? `Zgodność: ${scorePct}%` : '';
+  document.getElementById('riskMeta').textContent =
+    `#${d.comparison_id||'?'}  ·  ${d.doc_type_a||'A'} vs ${d.doc_type_b||'B'}  ·  ${new Date().toLocaleDateString('pl-PL')}`;
+
+  // ── Alert banner ────────────────────────────────────────────────────────
+  const alertBanner = document.getElementById('alertBanner');
+  const alertMap = {
+    ok:          { cls:'alert-ok',   icon:'✅', title:'ZGODNE',              body: `Wszystkie ${nTotal} pozycji zgodne co do wartości. Dokumenty gotowe do zatwierdzenia.` },
+    ostrzezenie: { cls:'alert-warn', icon:'⚠',  title:'WYMAGA WERYFIKACJI',  body: `${nOk} z ${nTotal} pozycji zgodnych. Wykryto ${nDiff} rozbieżno${nDiff===1?'ść':'ści'} wartości. Wymagana akceptacja przed rozliczeniem.` },
+    blad:        { cls:'alert-err',  icon:'❌', title:'BŁĘDY KRYTYCZNE',     body: `Wykryto ${nDiff} krytycznych rozbieżności na ${nTotal} pozycji. Dokument wymaga korekty przed akceptacją.` },
+  };
+  const al = alertMap[risk] || alertMap['ostrzezenie'];
+  alertBanner.style.display = '';
+  alertBanner.className = 'alert-banner ' + al.cls;
+  alertBanner.innerHTML = `<span class="alert-icon">${al.icon}</span><div><div class="alert-title">${al.title}</div><div class="alert-body">${al.body}</div></div>`;
+
+  // ── Doc cards ───────────────────────────────────────────────────────────
+  function hval(key, side) {
+    const k = key.toLowerCase();
+    const h = headers.find(h => h.key && h.key.toLowerCase().includes(k));
+    return h ? (h['val_'+side] || '') : '';
+  }
+  function cardHtml(label, filename, docType, side) {
+    const fields = [
+      ['Numer', hval('numer', side) || hval('nr', side) || hval('number', side)],
+      ['Data', hval('data', side) || hval('date', side)],
+      ['Waluta', hval('waluta', side) || hval('currency', side)],
+      ['Incoterms', hval('incoterms', side)],
+      ['Płatność', hval('platnosc', side) || hval('payment', side) || hval('termin', side)],
+      ['Dostawca', hval('dostawca', side) || hval('supplier', side) || hval('sprzedajacy', side)],
+    ].filter(([,v]) => v);
+    return `
+      <div class="doc-card-type">${esc(docType||label)}</div>
+      <div class="doc-card-file">${esc(filename)}</div>
+      ${fields.map(([k,v]) => `<div class="doc-card-row"><span class="doc-card-key">${k}:</span><span class="doc-card-val">${esc(String(v).slice(0,45))}</span></div>`).join('')}
+    `;
+  }
+  document.getElementById('docCardA').innerHTML = cardHtml('DOK A', nameA, d.doc_type_a, 'a');
+  document.getElementById('docCardB').innerHTML = cardHtml('DOK B', nameB, d.doc_type_b, 'b');
+
+  // ── KPI tiles ───────────────────────────────────────────────────────────
+  const taRaw = d.total_a || '—', tbRaw = d.total_b || '—';
+  const taF = parseFloat((taRaw+'').replace(/,/g,'')), tbF = parseFloat((tbRaw+'').replace(/,/g,''));
+  let deltaStr = '—', deltaPct = '';
+  if (!isNaN(taF) && !isNaN(tbF)) {
+    const d2 = tbF - taF;
+    deltaStr = (d2 >= 0 ? '+' : '') + d2.toFixed(2);
+    deltaPct = taF ? `(${(Math.abs(d2)/taF*100).toFixed(1)}%)` : '';
+  }
+  const isZero = deltaStr === '+0.00' || deltaStr === '0.00' || deltaStr === '—';
+  const scoreCls = parseFloat(scorePct) >= 95 ? 'score-ok' : parseFloat(scorePct) >= 70 ? 'score-warn' : 'score-err';
+  const scoreTile = `<div class="kpi-tile kpi-score ${scoreCls}">
+    <div class="kpi-label">WSKAŹNIK DOPASOWANIA</div>
+    <div class="kpi-value">${nTotal > 0 ? scorePct+'%' : '—'}</div>
+    <div class="kpi-sub">${nOk} / ${nTotal} pozycji</div>
+  </div>`;
+  const kpis = [
+    { label:'POZYCJE',      value: nTotal,   cls:'kpi-total', sub: 'porównane wg REF' },
+    { label:'ZGODNE',       value: nOk,      cls:'kpi-ok',    sub: 'co do grosza' },
+    { label:'ROZBIEŻNOŚCI', value: nDiff,    cls:'kpi-diff',  sub: nDiff > 0 ? 'poz. + nagłówki' : '' },
+    { label:'WARTOŚĆ PO',   value: taRaw,    cls:'kpi-net-a', sub: 'USD netto' },
+    { label:'WARTOŚĆ PI',   value: tbRaw,    cls:'kpi-net-b', sub: 'USD netto' },
+    { label:'RÓŻNICA',      value: deltaStr, cls:'kpi-delta'+(isZero?' kpi-delta-ok':''), sub: deltaPct },
+  ];
+  document.getElementById('kpiGrid').innerHTML = scoreTile + kpis.map(k =>
+    `<div class="kpi-tile ${k.cls}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${esc(String(k.value))}</div>
+      ${k.sub ? `<div class="kpi-sub">${esc(k.sub)}</div>` : ''}
+    </div>`).join('');
+
+  // ── Kluczowe rozbieżności cards ─────────────────────────────────────────
+  const divItems = items.filter(i => ['roznica','brak_w_a','brak_w_b'].includes(i.status));
+  const divHdrs  = headers.filter(h => ['roznica','brak_w_a','brak_w_b'].includes(h.status));
+  const divAll = [];
+  divItems.forEach(it => {
+    const issues = (it.issues||[]).join(' ').toLowerCase();
+    const missing = it.status.startsWith('brak');
+    const isVal = /cena|net|wartosc|price|value/i.test(issues);
+    const sev = missing ? 'critical' : isVal ? 'major' : 'info';
+    const na = it.net_a || it.qty_a || '—';
+    const nb = it.net_b || it.qty_b || '—';
+    let delta = '';
+    const naF = parseFloat((na+'').replace(/,/g,'')), nbF = parseFloat((nb+'').replace(/,/g,''));
+    if (!isNaN(naF) && !isNaN(nbF)) delta = (nbF >= naF ? '+' : '') + (nbF-naF).toFixed(2);
+    divAll.push({ sev, title: it.ref, before: na, after: nb, detail: (it.issues||[]).slice(0,2).join('; '), delta });
+  });
+  divHdrs.forEach(h => {
+    const missing = h.status.startsWith('brak');
+    divAll.push({ sev: missing ? 'critical' : 'major', title: h.key, before: h.val_a||'—', after: h.val_b||'—', detail: h.comment||'', delta: '' });
+  });
+  divAll.sort((a,b) => (['critical','major','info'].indexOf(a.sev)) - (['critical','major','info'].indexOf(b.sev)));
+
+  const divSec = document.getElementById('divSection');
+  if (divAll.length > 0) {
+    divSec.style.display = '';
+    document.getElementById('divCount').textContent = divAll.length;
+    document.getElementById('divGrid').innerHTML = divAll.slice(0,15).map(dv => {
+      const sevLabel = { critical:'KRYTYCZNE', major:'WIĘKSZE', info:'INFORMACYJNE' }[dv.sev];
+      const sevSub   = { critical:'Wymaga natychmiastowej korekty', major:'Istotna różnica', info:'Do weryfikacji' }[dv.sev];
+      const deltaNum = parseFloat(dv.delta);
+      const deltaHtml = dv.delta ? `<span class="div-delta-chip ${deltaNum > 0 ? 'pos' : 'neg'}">${dv.delta}</span>` : '';
+      return `<div class="div-card sev-${dv.sev}">
+        <div class="div-card-hdr">
+          <span class="div-sev">${sevLabel}</span>
+          <strong class="div-title">${esc(dv.title)}</strong>
+          <span style="font-size:11px;color:#94a3b8">${esc(sevSub)}</span>
+        </div>
+        <div class="div-arrow-row">
+          <div class="div-arrow-box div-arrow-a">
+            <span class="div-arrow-label">PO</span>
+            <span class="div-arrow-val">${esc(String(dv.before).slice(0,40))}</span>
+          </div>
+          <span class="div-arrow-icon">→</span>
+          <div class="div-arrow-box div-arrow-b">
+            <span class="div-arrow-label">PI</span>
+            <span class="div-arrow-val">${esc(String(dv.after).slice(0,40))}</span>
+          </div>
+          ${deltaHtml}
+        </div>
+        ${dv.detail ? `<div class="div-detail">${esc(String(dv.detail).slice(0,120))}</div>` : ''}
+      </div>`;
+    }).join('');
+  } else {
+    divSec.style.display = 'none';
+  }
+
+  // ── Export buttons ──────────────────────────────────────────────────────
+  const cid = d.comparison_id;
+  if (cid) {
+    document.getElementById('exportBtns').innerHTML =
+      `<a class="btn-export" href="/api/export/pdf/${cid}" target="_blank" rel="noopener noreferrer">⬇ PDF</a>
+       <a class="btn-export" href="/api/export/excel/${cid}" target="_blank" rel="noopener noreferrer">⬇ Excel</a>`;
+  }
+
+  // ── Header rows ─────────────────────────────────────────────────────────
+  const hb = document.getElementById('hBody'); hb.innerHTML = '';
+  document.getElementById('hCount').textContent = headers.length;
+  headers.forEach(h => {
+    const tr = document.createElement('tr');
+    tr.className = 'row-' + h.status;
+    tr.dataset.status = h.status;
+    const isDiff = ['roznica','brak_w_a','brak_w_b'].includes(h.status);
+    const aCls = isDiff ? 'cell-diff cell-mono' : 'cell-mono';
+    const bCls = isDiff ? 'cell-diff cell-mono' : 'cell-mono';
+    tr.innerHTML = `
+      <td>
+        <strong style="font-size:13px;color:#0f172a">${esc(h.key)}</strong>
+        ${h.comment ? `<div class="hdr-comment">${esc(h.comment)}</div>` : ''}
+      </td>
+      <td><span class="${aCls}">${h.val_a ? esc(h.val_a) : '<span class="cell-null">—</span>'}</span></td>
+      <td><span class="${bCls}">${h.val_b ? esc(h.val_b) : '<span class="cell-null">—</span>'}</span></td>
+      <td>${statusBadge(h.status)}</td>`;
+    hb.appendChild(tr);
+  });
+
+  // ── Item rows ───────────────────────────────────────────────────────────
+  const ib = document.getElementById('iBody'); ib.innerHTML = '';
+  document.getElementById('iCount').textContent = nTotal;
+  let sumNetA = 0, sumNetB = 0;
+  items.forEach(it => {
+    const tr = document.createElement('tr');
+    tr.className = 'row-' + it.status;
+    tr.dataset.status = it.status;
+    const qDiff = hasDiff(it.qty_a,   it.qty_b,   it.status);
+    const nDiff = hasDiff(it.net_a,   it.net_b,   it.status);
+    const naF2  = parseFloat((it.net_a+'').replace(/,/g,''));
+    const nbF2  = parseFloat((it.net_b+'').replace(/,/g,''));
+    let deltaHtml = '<span class="cell-null">—</span>';
+    if (!isNaN(naF2) && !isNaN(nbF2)) {
+      sumNetA += naF2; sumNetB += nbF2;
+      const dv = nbF2 - naF2;
+      if (Math.abs(dv) > 0.001) {
+        const cls = dv > 0 ? 'cell-delta-pos' : 'cell-delta-neg';
+        deltaHtml = `<span class="${cls}">${dv > 0 ? '+' : ''}${dv.toFixed(2)}</span>`;
+      } else {
+        deltaHtml = '<span class="cell-delta-zero">0.00</span>';
+      }
+    }
+    const issueHtml = (it.issues||[]).map(i => {
+      const isErr = i.includes('Δ=') || i.toLowerCase().includes('brak');
+      const isFmt = i.toLowerCase().includes('format');
+      return `<div class="issue-line ${isErr?'issue-err':isFmt?'issue-fmt':'issue-warn'}">
+        <span>${isErr?'❌':isFmt?'🔵':'⚠'}</span><span>${esc(i)}</span></div>`;
+    }).join('');
+    const stCls = { ok:'st-ok', roznica:'st-err', brak_w_a:'st-err', brak_w_b:'st-err', format:'st-fmt', watpliwe:'st-warn' }[it.status]||'st-warn';
+    const stIcon = { ok:'✓', roznica:'!', brak_w_a:'!', brak_w_b:'!', format:'~', watpliwe:'?' }[it.status]||'·';
+    tr.innerHTML = `
+      <td style="text-align:center"><span class="${stCls}">${stIcon}</span></td>
+      <td>
+        <span class="ref-code">${esc(it.ref)}</span>
+        ${issueHtml ? `<div class="issues-block">${issueHtml}</div>` : ''}
+      </td>
+      <td><span class="desc-text" title="${esc(it.desc_a||it.desc_b)}">${esc(it.desc_a||it.desc_b)||'<span class="cell-null">—</span>'}</span></td>
+      <td class="${qDiff?'cell-diff ':''} cell-mono" style="text-align:right">${esc(it.qty_a)||'<span class="cell-null">—</span>'}</td>
+      <td class="${nDiff?'cell-diff ':''} cell-mono" style="text-align:right">${esc(it.net_a)||'<span class="cell-null">—</span>'}</td>
+      <td class="${qDiff?'cell-diff ':''} cell-mono" style="text-align:right">${esc(it.qty_b)||'<span class="cell-null">—</span>'}</td>
+      <td class="cell-mono" style="font-size:11px">${esc(it.lot_b)||'<span class="cell-null">—</span>'}</td>
+      <td class="${nDiff?'cell-diff ':''} cell-mono" style="text-align:right">${esc(it.net_b)||'<span class="cell-null">—</span>'}</td>
+      <td style="text-align:right">${deltaHtml}</td>`;
+    ib.appendChild(tr);
+  });
+
+  // Totals row
+  if (nTotal > 0) {
+    const tr = document.createElement('tr');
+    tr.className = 'row-total';
+    const totalDelta = sumNetB - sumNetA;
+    const tdCls = Math.abs(totalDelta) < 0.01 ? 'cell-delta-zero' : totalDelta > 0 ? 'cell-delta-pos' : 'cell-delta-neg';
+    tr.innerHTML = `
+      <td></td>
+      <td colspan="2"><strong>RAZEM (${nTotal} poz.)</strong></td>
+      <td></td>
+      <td class="cell-mono" style="text-align:right"><strong>${esc(d.total_a||sumNetA.toFixed(2))}</strong></td>
+      <td></td><td></td>
+      <td class="cell-mono" style="text-align:right"><strong>${esc(d.total_b||sumNetB.toFixed(2))}</strong></td>
+      <td style="text-align:right"><span class="${tdCls}"><strong>${totalDelta >= 0 ? '+' : ''}${totalDelta.toFixed(2)}</strong></span></td>`;
+    ib.appendChild(tr);
+  }
+
+  // ── Financial reconciliation bar ────────────────────────────────────────
+  const finBar = document.getElementById('finBar');
+  if (!isNaN(taF) && !isNaN(tbF)) {
+    const maxV = Math.max(taF, tbF) || 1;
+    const pctA = Math.round(taF / maxV * 100);
+    const pctB = Math.round(tbF / maxV * 100);
+    const diffAbs = Math.abs(tbF - taF);
+    const diffPct = taF ? (diffAbs / taF * 100).toFixed(1) : '0.0';
+    const diffSign = tbF >= taF ? '+' : '-';
+    const diffCls  = diffAbs < 0.01 ? '#16a34a' : tbF > taF ? '#dc2626' : '#16a34a';
+    finBar.innerHTML = `
+      <div class="fin-row">
+        <span class="fin-label">Wartość A (zamówienie)</span>
+        <div class="fin-track"><div class="fin-fill-a" style="width:${pctA}%"></div></div>
+        <span class="fin-val">${esc(taRaw)}</span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Wartość B (proforma)</span>
+        <div class="fin-track"><div class="fin-fill-b" style="width:${pctB}%"></div></div>
+        <span class="fin-val">${esc(tbRaw)}</span>
+      </div>
+      <div class="fin-diff-row">
+        <span class="fin-diff-label">Różnica</span>
+        <span class="fin-diff-val" style="color:${diffCls}">${diffSign}${diffAbs.toFixed(2)}</span>
+        <span class="fin-diff-pct">${deltaPct}</span>
+        ${diffAbs < 0.01 ? '<span style="font-size:11px;color:#16a34a;font-weight:700">✓ Wartości zgodne</span>' : ''}
+      </div>`;
+  } else {
+    finBar.innerHTML = '<span style="font-size:12px;color:#94a3b8">Brak danych finansowych do porównania</span>';
+  }
+
+  // Reset filter + show
+  setF('all', document.querySelector('.fbtn[data-f="all"]'));
+  document.getElementById('res').classList.add('on');
+  document.getElementById('res').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────
+let currentF = 'all';
+function setF(f, btn) {
+  currentF = f;
+  document.querySelectorAll('.fbtn').forEach(b => b.className = 'fbtn');
+  btn.classList.add('active-' + f);
+  document.querySelectorAll('#hBody tr, #iBody tr').forEach(tr => {
+    if (tr.classList.contains('row-total')) return;
+    const s = tr.dataset.status || '';
+    let show = true;
+    if (f === 'err')  show = ['roznica','brak_w_a','brak_w_b'].includes(s);
+    if (f === 'warn') show = ['watpliwe'].includes(s);
+    if (f === 'fmt')  show = s === 'format';
+    if (f === 'ok')   show = s === 'ok';
+    tr.classList.toggle('hidden-row', !show);
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function hasDiff(va, vb, status) {
+  if (status !== 'roznica') return false;
+  if (!va || !vb) return false;
+  const fa = parseFloat(String(va).replace(/,/g,''));
+  const fb = parseFloat(String(vb).replace(/,/g,''));
+  if (!isNaN(fa) && !isNaN(fb)) return Math.abs(fa - fb) > 0.0001;
+  return String(va).trim() !== String(vb).trim();
+}
+
+function statusBadge(s) {
+  const m = {
+    ok:      ['ZGODNE',    'badge-ok'],
+    format:  ['SPRAWDŹ',   'badge-fmt'],
+    watpliwe:['SPRAWDŹ',   'badge-warn'],
+    roznica: ['NIEZGODNE', 'badge-err'],
+    brak_w_a:['TYLKO B',   'badge-miss'],
+    brak_w_b:['TYLKO A',   'badge-miss'],
+  };
+  const [l, c] = m[s] || [s, 'badge-fmt'];
+  return `<span class="badge ${c}">${l}</span>`;
+}
+
+function showErr(m) {
+  document.getElementById('errBox').textContent = '✕ ' + m;
+  document.getElementById('errBox').classList.add('on');
+  document.getElementById('ldr').classList.remove('on');
+  document.getElementById('btnRun').disabled = false;
+}
+
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Templates ─────────────────────────────────────────────────────────────
+(async function loadTemplates() {
+  try {
+    const r = await fetch('/api/templates?page_type=table');
+    if (!r.ok) return;
+    const list = await r.json();
+    const sel = document.getElementById('tplSel');
+    list.forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.id; o.textContent = t.name + (t.is_public ? ' 🌐' : '');
+      sel.appendChild(o);
+    });
+    sel._data = list;
+  } catch(e) {}
+})();
+
+function applyTemplate(id) {
+  if (!id) return;
+  const sel = document.getElementById('tplSel');
+  const tpl = (sel._data||[]).find(t => String(t.id) === String(id));
+  if (tpl) {
+    document.getElementById('tplApplied').style.display = 'inline';
+    fetch('/api/templates/' + id + '/use', { method:'POST' }).catch(()=>{});
+  }
+}
+</script>
+{% endblock %}

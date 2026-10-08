@@ -1,0 +1,595 @@
+{% extends "base.html" %}
+{% block title %}KPI — DocCompare{% endblock %}
+{% block extra_head %}
+<style>
+
+/* KPI cards */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:20px;position:relative;overflow:hidden;transition:border-color .2s}
+.kpi-card:hover{border-color:rgba(79,142,247,.3)}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.kpi-card.blue::before{background:linear-gradient(90deg,var(--accent),#7c3aed)}
+.kpi-card.red::before{background:linear-gradient(90deg,var(--error),#dc2626)}
+.kpi-card.yellow::before{background:linear-gradient(90deg,var(--warn),#d97706)}
+.kpi-card.green::before{background:linear-gradient(90deg,var(--ok),#059669)}
+.kpi-card.purple::before{background:linear-gradient(90deg,#8b5cf6,#7c3aed)}
+.kpi-num{font-size:36px;font-weight:800;line-height:1;letter-spacing:-1px;font-family:var(--mono)}
+.kpi-lbl{font-size:11px;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.kpi-sub{font-size:11px;color:var(--muted);margin-top:3px;opacity:.7}
+.blue .kpi-num{color:var(--accent)}
+.red .kpi-num{color:var(--error)}
+.yellow .kpi-num{color:var(--warn)}
+.green .kpi-num{color:var(--ok)}
+.purple .kpi-num{color:#a78bfa}
+
+/* Sections */
+.section{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  margin-bottom:20px;overflow:hidden}
+.section-hdr{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.section-hdr h2{font-size:14px;font-weight:600;flex:1}
+.sec-badge{background:var(--bg);color:var(--muted);font-size:11px;
+  padding:2px 8px;border-radius:10px;font-weight:600;font-family:var(--mono)}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px 16px;background:var(--bg);color:var(--muted);
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:9px 16px;border-bottom:1px solid rgba(42,45,58,.35);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.012)}
+
+.bar-cell{display:flex;align-items:center;gap:6px}
+.bar{height:5px;border-radius:3px;min-width:2px}
+.bar-err{background:var(--error)}
+.bar-warn{background:var(--warn)}
+.bar-ok{background:var(--ok)}
+
+
+.num{font-weight:700;font-size:14px;font-family:var(--mono)}
+.num-red{color:var(--error)}
+.num-yellow{color:var(--warn)}
+.num-green{color:var(--ok)}
+.num-gray{color:var(--muted)}
+.text-gray{color:var(--muted);font-size:12px}
+.empty{padding:40px;text-align:center;color:var(--muted);font-size:14px}
+
+/* Donut chart */
+.donut-wrap{display:flex;align-items:center;gap:24px;padding:20px;flex-wrap:wrap}
+.donut{position:relative;width:120px;height:120px;flex-shrink:0}
+.donut svg{transform:rotate(-90deg)}
+.donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.donut-pct{font-size:22px;font-weight:800;color:var(--text);font-family:var(--mono)}
+.donut-sub{font-size:10px;color:var(--muted)}
+.donut-legend{display:flex;flex-direction:column;gap:10px}
+.legend-row{display:flex;align-items:center;gap:8px;font-size:13px}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+</style>
+{% endblock %}
+
+{% block page_title %}Wskaźniki KPI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>📊 Wskaźniki KPI</h1>
+  <p>Statystyki porównań dokumentów handlowych ACME</p>
+</div>
+
+<!-- KPI CARDS -->
+{% set t = totals %}
+<div class="kpi-grid">
+  <div class="kpi-card blue">
+    <div class="kpi-num">{{ t.total_docs or 0 }}</div>
+    <div class="kpi-lbl">Łącznie dokumentów</div>
+    <div class="kpi-sub">{{ t.active_users or 0 }} aktywnych użytkowników</div>
+  </div>
+  <div class="kpi-card red">
+    <div class="kpi-num">{{ t.total_diffs or 0 }}</div>
+    <div class="kpi-lbl">Wykrytych błędów</div>
+    <div class="kpi-sub">suma diff_count wszystkich raportów</div>
+  </div>
+  <div class="kpi-card yellow">
+    <div class="kpi-num">{{ t.error_docs or 0 }}</div>
+    <div class="kpi-lbl">Raportów z błędem</div>
+    <div class="kpi-sub">status = błąd</div>
+  </div>
+  <div class="kpi-card green">
+    <div class="kpi-num">{{ t.ok_docs or 0 }}</div>
+    <div class="kpi-lbl">Raportów OK</div>
+    <div class="kpi-sub">bez rozbieżności</div>
+  </div>
+  <div class="kpi-card purple">
+    <div class="kpi-num">{{ t.unique_suppliers or 0 }}</div>
+    <div class="kpi-lbl">Dostawców</div>
+    <div class="kpi-sub">z przypisanym kodem</div>
+  </div>
+</div>
+
+<!-- DONUT — rozkład statusów -->
+{% if t.total_docs %}
+{% set pct_err  = ((t.error_docs   or 0) / (t.total_docs) * 100) | round(1) %}
+{% set pct_warn = ((t.warning_docs or 0) / (t.total_docs) * 100) | round(1) %}
+{% set pct_ok   = ((t.ok_docs      or 0) / (t.total_docs) * 100) | round(1) %}
+{% set r = 52 %}
+{% set circ = 326.7 %}
+{% set dash_err  = (pct_err  / 100 * circ) | round(1) %}
+{% set dash_warn = (pct_warn / 100 * circ) | round(1) %}
+{% set dash_ok   = (pct_ok   / 100 * circ) | round(1) %}
+{% set off_err  = 0 %}
+{% set off_warn = dash_err %}
+{% set off_ok   = dash_err + dash_warn %}
+
+<div class="section">
+  <div class="section-hdr"><h2>📈 Rozkład wyników</h2></div>
+  <div class="donut-wrap">
+    <div class="donut">
+      <svg width="120" height="120" viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="{{ r }}" fill="none" stroke="#2a2d3a" stroke-width="16"/>
+        {% if dash_err > 0 %}
+        <circle cx="60" cy="60" r="{{ r }}" fill="none" stroke="#f74f4f" stroke-width="16"
+                stroke-dasharray="{{ dash_err }} {{ circ - dash_err }}"
+                stroke-dashoffset="{{ -off_err }}"/>
+        {% endif %}
+        {% if dash_warn > 0 %}
+        <circle cx="60" cy="60" r="{{ r }}" fill="none" stroke="#f7a84f" stroke-width="16"
+                stroke-dasharray="{{ dash_warn }} {{ circ - dash_warn }}"
+                stroke-dashoffset="{{ -(off_warn) }}"/>
+        {% endif %}
+        {% if dash_ok > 0 %}
+        <circle cx="60" cy="60" r="{{ r }}" fill="none" stroke="#4fce8e" stroke-width="16"
+                stroke-dasharray="{{ dash_ok }} {{ circ - dash_ok }}"
+                stroke-dashoffset="{{ -(off_ok) }}"/>
+        {% endif %}
+      </svg>
+      <div class="donut-center">
+        <div class="donut-pct">{{ t.total_docs }}</div>
+        <div class="donut-sub">raportów</div>
+      </div>
+    </div>
+    <div class="donut-legend">
+      <div class="legend-row">
+        <div class="legend-dot" style="background:var(--error)"></div>
+        <span>Błąd: <strong>{{ t.error_docs or 0 }}</strong> ({{ pct_err }}%)</span>
+      </div>
+      <div class="legend-row">
+        <div class="legend-dot" style="background:var(--warn)"></div>
+        <span>Ostrzeżenie: <strong>{{ t.warning_docs or 0 }}</strong> ({{ pct_warn }}%)</span>
+      </div>
+      <div class="legend-row">
+        <div class="legend-dot" style="background:var(--ok)"></div>
+        <span>OK/Format: <strong>{{ t.ok_docs or 0 }}</strong> ({{ pct_ok }}%)</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- DOKUMENTY PER DOSTAWCA -->
+<div class="section">
+  <div class="section-hdr">
+    <h2>🏭 Dokumenty per dostawca</h2>
+    <span class="sec-badge">{{ per_supplier | length }} dostawców</span>
+  </div>
+  {# FIX 11: empty state #}
+  {% if not per_supplier %}
+  <div class="empty">Brak danych dostawców</div>
+  {% else %}
+  {# FIX 10: show-more pagination for supplier table #}
+  <div id="supplierTableWrap">
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Dostawca</th>
+        <th scope="col" style="text-align:right">Razem</th>
+        <th scope="col" style="text-align:right">Błędy</th>
+        <th scope="col" style="text-align:right">Ostrzeżenia</th>
+        <th scope="col" style="text-align:right">Różnice</th>
+        <th scope="col">Rozkład</th>
+        <th scope="col">Ostatnie</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in per_supplier %}
+      <tr class="supplier-static-row{% if loop.index > 10 %} supplier-extra-row{% endif %}"
+          {% if loop.index > 10 %}style="display:none"{% endif %}>
+        <td><strong>{{ s.supplier }}</strong></td>
+        <td style="text-align:right"><span class="num num-gray">{{ s.total }}</span></td>
+        <td style="text-align:right">
+          {% if s.errors %}<span class="num num-red">{{ s.errors }}</span>
+          {% else %}<span class="text-gray">0</span>{% endif %}
+        </td>
+        <td style="text-align:right">
+          {% if s.warnings %}<span class="num num-yellow">{{ s.warnings }}</span>
+          {% else %}<span class="text-gray">0</span>{% endif %}
+        </td>
+        <td style="text-align:right">
+          {% if s.total_diffs %}<span class="num num-red">{{ s.total_diffs }}</span>
+          {% else %}<span class="text-gray">0</span>{% endif %}
+        </td>
+        <td>
+          <div class="bar-cell">
+            {% if s.errors %}
+            <div class="bar bar-err" style="width:{{ [s.errors / s.total * 80, 80] | min | round }}px"></div>
+            {% endif %}
+            {% if s.warnings %}
+            <div class="bar bar-warn" style="width:{{ [s.warnings / s.total * 80, 80] | min | round }}px"></div>
+            {% endif %}
+            <div class="bar bar-ok" style="width:{{ [(s.total - (s.errors or 0) - (s.warnings or 0)) / s.total * 80, 2] | max | round }}px"></div>
+          </div>
+        </td>
+        <td><span class="text-gray">{{ (s.last_at or '')[:10] }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if per_supplier | length > 10 %}
+  <div style="text-align:center;padding:10px 16px">
+    <button type="button" id="supplierStaticShowBtn"
+      onclick="(function(btn){var rows=document.querySelectorAll('.supplier-extra-row');var hidden=rows[0]&&rows[0].style.display==='none';rows.forEach(function(r){r.style.display=hidden?'':'none';});btn.textContent=hidden?'Pokaż mniej':'Pokaż wszystkich ({{ per_supplier | length }})';})(this)"
+      style="padding:6px 18px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--accent);cursor:pointer;font-size:13px;font-weight:600">
+      Pokaż wszystkich ({{ per_supplier | length }})
+    </button>
+  </div>
+  {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- DOKUMENTY PER UŻYTKOWNIK -->
+<div class="section">
+  <div class="section-hdr">
+    <h2>👤 Dokumenty per użytkownik</h2>
+    <span class="sec-badge">{{ per_user | length }} użytkowników</span>
+  </div>
+  {% if per_user %}
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Użytkownik</th>
+        <th scope="col">Rola</th>
+        <th scope="col" style="text-align:right">Razem</th>
+        <th scope="col" style="text-align:right">Błędy</th>
+        <th scope="col" style="text-align:right">Ostrzeżenia</th>
+        <th scope="col" style="text-align:right">Różnice</th>
+        <th scope="col">Aktywność</th>
+        <th scope="col">Ostatnie</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in per_user %}
+      <tr>
+        <td><strong>{{ u.username }}</strong></td>
+        <td><span class="badge role-{{ u.role | lower }}">{{ u.role }}</span></td>
+        <td style="text-align:right"><span class="num num-gray">{{ u.total or 0 }}</span></td>
+        <td style="text-align:right">
+          {% if u.errors %}<span class="num num-red">{{ u.errors }}</span>
+          {% else %}<span class="text-gray">0</span>{% endif %}
+        </td>
+        <td style="text-align:right">
+          {% if u.warnings %}<span class="num num-yellow">{{ u.warnings }}</span>
+          {% else %}<span class="text-gray">0</span>{% endif %}
+        </td>
+        <td style="text-align:right">
+          {% if u.total_diffs %}<span class="num num-red">{{ u.total_diffs }}</span>
+          {% else %}<span class="text-gray">0</span>{% endif %}
+        </td>
+        <td>
+          {% if u.total %}
+          <div class="bar-cell">
+            {% if u.errors %}
+            <div class="bar bar-err" style="width:{{ [u.errors / u.total * 80, 80]|min|round }}px"></div>
+            {% endif %}
+            {% if u.warnings %}
+            <div class="bar bar-warn" style="width:{{ [u.warnings / u.total * 80, 80]|min|round }}px"></div>
+            {% endif %}
+            <div class="bar bar-ok" style="width:{{ [(u.total - (u.errors or 0) - (u.warnings or 0)) / u.total * 80, 2]|max|round }}px"></div>
+          </div>
+          {% endif %}
+        </td>
+        <td><span class="text-gray">{{ (u.last_at or '')[:10] }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Brak danych</div>
+  {% endif %}
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     DYNAMIC SECTIONS — loaded via /api/kpi/data
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<!-- SUPPLIER DISCREPANCIES TABLE + BAR CHART -->
+<div class="section" id="sec-supplier-disc">
+  <div class="section-hdr">
+    <h2>⚠️ Rozbieżności per dostawca</h2>
+    <span class="sec-badge" id="badge-supplier-disc">ładowanie…</span>
+  </div>
+  <div id="supplier-disc-content">
+    <div class="empty">Ładowanie danych…</div>
+  </div>
+  <div style="padding:16px 18px 4px">
+    <canvas id="chartSupplierBar" height="120"></canvas>
+  </div>
+</div>
+
+<!-- MONTHLY TREND LINE CHART -->
+<div class="section" id="sec-monthly-trend">
+  <div class="section-hdr">
+    <h2>📅 Trend miesięczny (ostatnie 12 miesięcy)</h2>
+  </div>
+  <div style="padding:16px 18px">
+    <canvas id="chartMonthlyTrend" height="140"></canvas>
+  </div>
+  <div id="monthly-trend-empty" class="empty" style="display:none">Brak danych</div>
+</div>
+
+<!-- DOC TYPE BREAKDOWN DOUGHNUT -->
+<div class="section" id="sec-doc-type">
+  <div class="section-hdr">
+    <h2>🗂️ Typy dokumentów</h2>
+  </div>
+  <div style="padding:16px 18px;display:flex;align-items:center;gap:32px;flex-wrap:wrap">
+    <div style="position:relative;width:200px;height:200px;flex-shrink:0">
+      <canvas id="chartDocType"></canvas>
+    </div>
+    <div id="doc-type-legend" style="display:flex;flex-direction:column;gap:8px;font-size:13px"></div>
+  </div>
+  <div id="doc-type-empty" class="empty" style="display:none">Brak danych</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+(function() {
+  // Chart.js global defaults — dark theme
+  Chart.defaults.color = '#9ba3af';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+  Chart.defaults.font.family = "Inter, 'Segoe UI', sans-serif";
+  Chart.defaults.font.size = 11;
+
+  const PALETTE = [
+    '#4f8ef7','#f74f4f','#f7a84f','#4fce8e','#a78bfa',
+    '#38bdf8','#fb923c','#34d399','#e879f9','#facc15'
+  ];
+
+  let chartBar = null, chartLine = null, chartDoughnut = null;
+
+  function fmtPct(num, den) {
+    if (!den) return '0%';
+    return (num / den * 100).toFixed(1) + '%';
+  }
+
+  function fmtNum(v) {
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'number') return v % 1 === 0 ? v.toString() : v.toFixed(2);
+    return String(v);
+  }
+
+  function renderSupplierDisc(data) {
+    const rows = data.supplier_discrepancies || [];
+    const badge = document.getElementById('badge-supplier-disc');
+    badge.textContent = rows.length + ' dostawców';
+
+    const cont = document.getElementById('supplier-disc-content');
+    if (!rows.length) {
+      cont.innerHTML = '<div class="empty">Brak danych</div>';
+      document.getElementById('chartSupplierBar').closest('div').style.display = 'none';
+      return;
+    }
+
+    // Build sortable table
+    let html = '<div style="overflow-x:auto"><table id="tbl-supplier-disc">';
+    html += '<thead><tr>';
+    const headers = [
+      ['supplier_code','Dostawca'],
+      ['total','Razem porównań'],
+      ['errors','Błędy'],
+      ['pct','% błędów'],
+      ['avg_diffs','Średnie różnice'],
+      ['last_comparison','Ostatnie porównanie']
+    ];
+    headers.forEach(function(h) {
+      html += '<th scope="col" style="cursor:pointer;user-select:none" data-col="' + h[0] + '">'
+            + h[1] + ' <span style="font-size:9px;opacity:.5" aria-hidden="true">▼</span></th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    // FIX 10: show first 10 rows, hide the rest with a "show more" button
+    var SHOW_LIMIT = 10;
+    rows.forEach(function(r, idx) {
+      const pct = fmtPct(r.errors || 0, r.total || 1);
+      const errCls = (r.errors > 0) ? 'num-red' : 'num-gray';
+      const hiddenStyle = idx >= SHOW_LIMIT ? ' class="supplier-disc-hidden" style="display:none"' : '';
+      html += '<tr' + hiddenStyle + '>'
+        + '<td><strong>' + esc(r.supplier_code || '—') + '</strong></td>'
+        + '<td style="text-align:right"><span class="num num-gray">' + fmtNum(r.total) + '</span></td>'
+        + '<td style="text-align:right"><span class="num ' + errCls + '">' + fmtNum(r.errors) + '</span></td>'
+        + '<td style="text-align:right"><span class="num ' + errCls + '">' + pct + '</span></td>'
+        + '<td style="text-align:right"><span class="num num-gray">' + fmtNum(r.avg_diffs !== null ? parseFloat(r.avg_diffs).toFixed(1) : null) + '</span></td>'
+        + '<td><span class="text-gray">' + esc((r.last_comparison || '').slice(0,10) || '—') + '</span></td>'
+        + '</tr>';
+    });
+    if (rows.length > SHOW_LIMIT) {
+      html += '<tr><td colspan="6" style="text-align:center;padding:10px">'
+        + '<button type="button" id="supplierDiscShowBtn" onclick="(function(btn){var rows=document.querySelectorAll(\'.supplier-disc-hidden\');var hidden=rows[0]&&rows[0].style.display===\'none\';rows.forEach(function(r){r.style.display=hidden?\'\':\'none\';});btn.textContent=hidden?\'Pokaż mniej\':\'Pokaż więcej (' + (rows.length - SHOW_LIMIT) + ')\'; })(this)" style="padding:6px 18px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--accent);cursor:pointer;font-size:13px;font-weight:600">'
+        + 'Pokaż więcej (' + (rows.length - SHOW_LIMIT) + ')'
+        + '</button></td></tr>';
+    }
+    html += '</tbody></table></div>';
+    cont.innerHTML = html;
+
+    // Simple client-side sort
+    const tbl = document.getElementById('tbl-supplier-disc');
+    let sortCol = 'errors', sortDir = -1;
+    tbl.querySelectorAll('th[data-col]').forEach(function(th) {
+      th.addEventListener('click', function() {
+        const col = th.dataset.col;
+        if (sortCol === col) { sortDir *= -1; } else { sortCol = col; sortDir = -1; }
+        const tbody = tbl.querySelector('tbody');
+        const trList = Array.from(tbody.querySelectorAll('tr'));
+        trList.sort(function(a, b) {
+          const idx = Array.from(tbl.querySelectorAll('th')).indexOf(th);
+          const va = a.cells[idx].textContent.trim().replace('%','');
+          const vb = b.cells[idx].textContent.trim().replace('%','');
+          const na = parseFloat(va), nb = parseFloat(vb);
+          if (!isNaN(na) && !isNaN(nb)) return sortDir * (na - nb);
+          return sortDir * va.localeCompare(vb);
+        });
+        trList.forEach(function(tr) { tbody.appendChild(tr); });
+      });
+    });
+
+    // Horizontal bar chart
+    const labels = rows.slice(0, 10).map(function(r) { return r.supplier_code || '—'; });
+    const errVals = rows.slice(0, 10).map(function(r) { return r.errors || 0; });
+    const totVals = rows.slice(0, 10).map(function(r) { return (r.total || 0) - (r.errors || 0); });
+
+    if (chartBar) chartBar.destroy();
+    chartBar = new Chart(document.getElementById('chartSupplierBar'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Błędy', data: errVals, backgroundColor: 'rgba(247,79,79,0.7)', borderRadius: 3 },
+          { label: 'Poprawne', data: totVals, backgroundColor: 'rgba(79,206,142,0.35)', borderRadius: 3 }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { position: 'top' } },
+        scales: {
+          x: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { stacked: true, grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  function renderMonthlyTrend(data) {
+    const rows = data.monthly_trend || [];
+    if (!rows.length) {
+      document.getElementById('sec-monthly-trend').querySelector('div[style]').style.display = 'none';
+      document.getElementById('monthly-trend-empty').style.display = 'block';
+      return;
+    }
+    const labels  = rows.map(function(r) { return r.month || ''; });
+    const totals  = rows.map(function(r) { return r.total || 0; });
+    const errors  = rows.map(function(r) { return r.errors || 0; });
+
+    if (chartLine) chartLine.destroy();
+    chartLine = new Chart(document.getElementById('chartMonthlyTrend'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Wszystkie',
+            data: totals,
+            borderColor: '#4f8ef7',
+            backgroundColor: 'rgba(79,142,247,0.1)',
+            fill: true,
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6
+          },
+          {
+            label: 'Z błędami',
+            data: errors,
+            borderColor: '#f74f4f',
+            backgroundColor: 'rgba(247,79,79,0.08)',
+            fill: true,
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'top' } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } }
+        }
+      }
+    });
+  }
+
+  function renderDocTypeBreakdown(data) {
+    const rows = data.doc_type_breakdown || [];
+    if (!rows.length) {
+      document.getElementById('sec-doc-type').querySelector('div[style*="flex"]').style.display = 'none';
+      document.getElementById('doc-type-empty').style.display = 'block';
+      return;
+    }
+    const labels  = rows.map(function(r) { return r.doc_type || '—'; });
+    const totals  = rows.map(function(r) { return r.total || 0; });
+    const colors  = labels.map(function(_, i) { return PALETTE[i % PALETTE.length]; });
+
+    if (chartDoughnut) chartDoughnut.destroy();
+    chartDoughnut = new Chart(document.getElementById('chartDocType'), {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: totals,
+          backgroundColor: colors.map(function(c) { return c + 'cc'; }),
+          borderColor: colors,
+          borderWidth: 1,
+          hoverOffset: 6
+        }]
+      },
+      options: {
+        responsive: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                const sum = ctx.dataset.data.reduce(function(a,b){ return a+b; }, 0);
+                return ' ' + ctx.label + ': ' + ctx.raw + ' (' + fmtPct(ctx.raw, sum) + ')';
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // External legend
+    const legendEl = document.getElementById('doc-type-legend');
+    legendEl.innerHTML = '';
+    const grandTotal = totals.reduce(function(a,b){ return a+b; }, 0);
+    rows.forEach(function(r, i) {
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;align-items:center;gap:8px';
+      div.innerHTML = '<div style="width:10px;height:10px;border-radius:50%;background:' + colors[i] + ';flex-shrink:0"></div>'
+        + '<span>' + esc(r.doc_type || '—') + ': <strong>' + r.total + '</strong>'
+        + ' <span style="color:var(--muted);font-size:11px">(' + fmtPct(r.total, grandTotal) + ')'
+        + (r.errors > 0 ? ' <span style="color:var(--error)">' + r.errors + ' błędów</span>' : '')
+        + '</span></span>';
+      legendEl.appendChild(div);
+    });
+  }
+
+  // Load data from API
+  fetch('/api/kpi/data?period=365')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      renderSupplierDisc(data);
+      renderMonthlyTrend(data);
+      renderDocTypeBreakdown(data);
+    })
+    .catch(function(err) {
+      console.warn('KPI data load error:', err);
+      ['sec-supplier-disc','sec-monthly-trend','sec-doc-type'].forEach(function(id) {
+        var sec = document.getElementById(id);
+        if (sec) sec.insertAdjacentHTML('beforeend',
+          '<div style="padding:16px;color:var(--error);font-size:13px">Błąd ładowania danych — odśwież stronę.</div>');
+      });
+    });
+})();
+</script>
+{% endblock %}

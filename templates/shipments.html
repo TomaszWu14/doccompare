@@ -1,0 +1,536 @@
+{% extends "base.html" %}
+{% block title %}Dostawy — DocCompare{% endblock %}
+
+{% block extra_head %}
+<style>
+.stat-row { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:24px; }
+@media(max-width:900px){ .stat-row{grid-template-columns:1fr 1fr;} }
+.stat-box { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+.stat-box .sn { font-size:24px; font-weight:800; color:var(--text); }
+.stat-box .sl { font-size:11px; color:var(--muted); font-weight:600; margin-top:2px; }
+
+.toolbar { display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap; align-items:center; }
+.toolbar input, .toolbar select { padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-size:13px; }
+.toolbar input { flex:1; min-width:200px; }
+
+.tbl-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+.tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.tbl th { background:var(--surface2); padding:10px 14px; text-align:left; font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--border); }
+.tbl td { padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.tbl tr:last-child td { border-bottom:none; }
+.tbl tr:hover td { background:var(--surface2); }
+
+.status-badge { display:inline-block; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:700; white-space:nowrap; }
+.st-nowe          { background:#dbeafe; color:#1e3a8a; }
+.st-potwierdzono  { background:#ede9fe; color:#5b21b6; }
+.st-w_transporcie { background:#fef3c7; color:#92400e; }
+.st-odprawa       { background:#fed7aa; color:#c2410c; }
+.st-w_magazynie   { background:#ccfbf1; color:#0f766e; }
+.st-zakonczone    { background:#dcfce7; color:#166534; }
+[data-theme="dark"] .st-nowe          { background:rgba(30,58,138,.2);  color:#93c5fd; }
+[data-theme="dark"] .st-potwierdzono  { background:rgba(91,33,182,.2);  color:#c4b5fd; }
+[data-theme="dark"] .st-w_transporcie { background:rgba(146,64,14,.2);  color:#fcd34d; }
+[data-theme="dark"] .st-odprawa       { background:rgba(194,65,12,.2);  color:#fdba74; }
+[data-theme="dark"] .st-w_magazynie   { background:rgba(15,118,110,.2); color:#5eead4; }
+[data-theme="dark"] .st-zakonczone    { background:rgba(22,101,52,.2);  color:#86efac; }
+
+/* Timeline steps */
+.timeline { display:flex; align-items:center; gap:0; }
+.tl-step {
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:4px 8px; font-size:10px; font-weight:700; color:var(--muted);
+  position:relative; min-width:60px; text-align:center;
+}
+.tl-dot {
+  width:18px; height:18px; border-radius:50%;
+  border:2px solid var(--border); background:var(--surface2);
+  display:flex; align-items:center; justify-content:center;
+  font-size:10px;
+}
+.tl-step.done .tl-dot { background:var(--ok); border-color:var(--ok); color:#fff; }
+.tl-step.active .tl-dot { background:var(--accent); border-color:var(--accent); color:#fff; }
+.tl-line { flex:1; height:2px; background:var(--border); min-width:12px; }
+.tl-line.done { background:var(--ok); }
+
+.btn-primary { padding:9px 20px; background:var(--accent); color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; }
+.btn-sm { padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer; }
+.btn-sm:hover { border-color:var(--accent); color:var(--accent); }
+
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center; }
+.modal-overlay.open { display:flex; }
+.modal-box { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px; width:500px; max-width:95vw; display:flex; flex-direction:column; gap:16px; }
+.form-group { display:flex; flex-direction:column; gap:5px; }
+.form-group label { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; }
+.form-group input, .form-group select, .form-group textarea { padding:9px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface2); color:var(--text); font-size:13px; }
+.modal-footer { display:flex; gap:10px; justify-content:flex-end; }
+.btn-secondary { padding:9px 20px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:8px; font-size:13px; cursor:pointer; }
+
+/* Validate panel */
+.validate-panel {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px;
+  margin-bottom:24px;
+}
+.val-result { padding:12px 16px; border-radius:10px; font-size:13px; margin-top:12px; }
+.val-ok   { background:#dcfce7; color:#166534; border:1px solid #16a34a44; }
+.val-warn { background:#fef3c7; color:#92400e; border:1px solid #d9770644; }
+.val-row  { display:flex; gap:12px; align-items:center; margin-top:6px; font-size:12px; }
+</style>
+{% endblock %}
+
+{% block page_title %}Dostawy{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1>Dostawy</h1>
+    <p class="sub">Śledzenie zamówień od PO do SAP MIGO · Format: DD-MM-RRRR/NR_PO</p>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button type="button" class="btn-sm" onclick="document.getElementById('validatePanel').style.display=document.getElementById('validatePanel').style.display==='none'?'block':'none'">
+      🔍 Waliduj plik
+    </button>
+    <button type="button" class="btn-primary" onclick="document.getElementById('newModal').classList.add('open')">+ Nowa dostawa</button>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stat-row">
+  <div class="stat-box"><div class="sn">{{ total }}</div><div class="sl">Wszystkich dostaw</div></div>
+  <div class="stat-box"><div class="sn" style="color:var(--accent)">{{ active }}</div><div class="sl">Aktywnych</div></div>
+  <div class="stat-box"><div class="sn" style="color:var(--warn)">{{ by_status.get('w_transporcie',0) }}</div><div class="sl">W transporcie</div></div>
+  <div class="stat-box"><div class="sn" style="color:var(--error)">{{ by_status.get('odprawa',0) }}</div><div class="sl">Na odprawie</div></div>
+  <div class="stat-box"><div class="sn" style="color:var(--ok)">{{ by_status.get('zakonczone',0) }}</div><div class="sl">Zakończonych</div></div>
+</div>
+
+<!-- VALIDATE PANEL -->
+<div class="validate-panel" id="validatePanel" style="display:none">
+  <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px">🔍 Walidacja pliku PDF do zamówienia</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <div class="form-group" style="flex:1;min-width:180px">
+      <label for="vPO">Numer PO (SAP)</label>
+      <input type="text" id="vPO" placeholder="np. 4500012345" style="font-family:var(--mono)">
+    </div>
+    <div class="form-group" style="flex:2;min-width:200px">
+      <label for="vFile">Plik PDF</label>
+      <input type="file" id="vFile" accept=".pdf" style="padding:6px 12px">
+    </div>
+    <button type="button" class="btn-primary" onclick="validateFile()" style="margin-bottom:1px">Sprawdź</button>
+  </div>
+  <div id="valResult" style="display:none"></div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <label for="searchBox" class="sr-only">Szukaj przesyłek</label>
+  <input type="search" id="searchBox" placeholder="Szukaj PO, dostawcy, referencji…" oninput="filterRows()" autocomplete="off">
+  <select id="statusFilter" onchange="filterRows()">
+    <option value="">Wszystkie statusy</option>
+    <option value="nowe">Nowe</option>
+    <option value="potwierdzono">Potwierdzone</option>
+    <option value="w_transporcie">W transporcie</option>
+    <option value="odprawa">Odprawa</option>
+    <option value="w_magazynie">W magazynie</option>
+    <option value="zakonczone">Zakończone</option>
+  </select>
+</div>
+
+<!-- TABLE -->
+<div class="tbl-wrap">
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th scope="col">Referencja dostawy</th>
+        <th scope="col">Nr PO (SAP)</th>
+        <th scope="col">Dostawca</th>
+        <th scope="col">Status</th>
+        <th scope="col">Postęp (timeline)</th>
+        <th scope="col">Powiązania</th>
+        <th scope="col">Data</th>
+        <th scope="col">Akcje</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody">
+      {% for it in items %}
+      {% set steps = ['nowe','potwierdzono','w_transporcie','odprawa','w_magazynie','zakonczone'] %}
+      {% set cur_idx = steps.index(it.status) if it.status in steps else 0 %}
+      <tr data-search="{{ it.shipment_ref }} {{ it.po_number }} {{ it.supplier_name }}"
+          data-status="{{ it.status }}">
+        <td>
+          <strong style="font-family:var(--mono);font-size:12px">{{ it.shipment_ref }}</strong>
+        </td>
+        <td style="font-family:var(--mono);color:var(--accent);font-weight:700">{{ it.po_number }}</td>
+        <td style="color:var(--muted)">{{ it.supplier_name or '—' }}</td>
+        <td>
+          <span class="status-badge st-{{ it.status }}">
+            {% if it.status == 'nowe' %}🆕 Nowe
+            {% elif it.status == 'potwierdzono' %}✅ Potwierdzone
+            {% elif it.status == 'w_transporcie' %}🚢 W transporcie
+            {% elif it.status == 'odprawa' %}🛃 Odprawa
+            {% elif it.status == 'w_magazynie' %}🏭 W magazynie
+            {% elif it.status == 'zakonczone' %}✔ Zakończone
+            {% endif %}
+          </span>
+        </td>
+        <td>
+          <div class="timeline">
+            {% for step in steps %}
+            {% set i = loop.index0 %}
+            {% if i > 0 %}<div class="tl-line {% if i <= cur_idx %}done{% endif %}"></div>{% endif %}
+            <div class="tl-step {% if i < cur_idx %}done{% elif i == cur_idx %}active{% endif %}">
+              <div class="tl-dot">{% if i < cur_idx %}✓{% elif i == cur_idx %}●{% endif %}</div>
+            </div>
+            {% endfor %}
+          </div>
+        </td>
+        <td style="font-size:11px">
+          {% if it.comparison_id %}<a href="/history" style="color:var(--accent)">📋 Porównanie #{{ it.comparison_id }}</a><br>{% endif %}
+          {% if it.transport_queue_id %}<a href="/transport/queue" style="color:var(--accent)">🚢 Kontener</a><br>{% endif %}
+          {% if it.warehouse_receipt_id %}<a href="/warehouse" style="color:var(--accent)">🏭 Magazyn</a>{% endif %}
+          {% if not it.comparison_id and not it.transport_queue_id and not it.warehouse_receipt_id %}
+          <span style="color:var(--muted)">—</span>
+          {% endif %}
+        </td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ (it.shipment_date or it.created_at or '')[:10] }}</td>
+        <td>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select class="btn-sm" onchange="updateStatus('{{ it.shipment_ref }}', this)" style="padding:3px 6px"
+                    data-orig="{{ it.status }}">
+              {% for s in ['nowe','potwierdzono','w_transporcie','odprawa','w_magazynie','zakonczone'] %}
+              <option value="{{ s }}" {% if it.status == s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" class="btn-sm" onclick="openDocs({{ it.shipment_ref|tojson }},{{ it.po_number|tojson }})" title="Dokumenty dostawy" style="padding:3px 8px">📁</button>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" style="text-align:center;padding:50px;color:var(--muted)">
+        <div style="font-size:36px;margin-bottom:10px">📦</div>
+        <div style="font-weight:700">Brak dostaw</div>
+        <div style="font-size:13px;margin-top:4px">Dostawy są tworzone automatycznie przy porównaniu dokumentów PO/PI lub ręcznie przyciskiem „+ Nowa dostawa".</div>
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- NEW SHIPMENT MODAL -->
+<div class="modal-overlay" id="newModal" role="dialog" aria-modal="true" aria-labelledby="newModalTitle">
+  <div class="modal-box">
+    <div id="newModalTitle" style="font-size:16px;font-weight:800;color:var(--text)">Nowa dostawa</div>
+    <div class="form-group">
+      <label for="nPO">Numer PO (SAP) *</label>
+      <input type="text" id="nPO" placeholder="np. 4500012345" style="font-family:var(--mono)">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label for="nDate">Data zamówienia</label>
+        <input type="date" id="nDate">
+      </div>
+      <div class="form-group">
+        <label for="nSupplier">Dostawca</label>
+        <input type="text" id="nSupplier" placeholder="nazwa dostawcy">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="nNotes">Notatki</label>
+      <textarea id="nNotes" rows="2" placeholder="opcjonalne…"></textarea>
+    </div>
+    <div id="newPreview" style="display:none;padding:8px 12px;background:var(--surface2);border-radius:8px;font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent)"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn-secondary" onclick="document.getElementById('newModal').classList.remove('open')">Anuluj</button>
+      <button type="button" class="btn-primary" onclick="createShipment()">Utwórz dostawę</button>
+    </div>
+  </div>
+</div>
+
+<!-- DOCUMENTS MODAL -->
+<div class="modal-overlay" id="docsModal" style="z-index:1100" role="dialog" aria-modal="true" aria-labelledby="docsModalTitle">
+  <div class="modal-box" style="width:640px;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div>
+        <div id="docsModalTitle" style="font-size:16px;font-weight:800;color:var(--text)">📁 Dokumenty dostawy</div>
+        <div id="docsSubtitle" style="font-size:12px;color:var(--muted);font-family:var(--mono)"></div>
+      </div>
+      <button type="button" class="btn-secondary" style="padding:4px 10px" onclick="closeDocs()">✕</button>
+    </div>
+
+    <!-- Upload section -->
+    <div style="border:2px dashed var(--border);border-radius:10px;padding:14px;margin:10px 0">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text)">➕ Dodaj dokument</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
+        <div>
+          <label style="font-size:11px;color:var(--muted)">Plik PDF</label>
+          <input type="file" id="docFile" accept=".pdf" style="width:100%;font-size:12px">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted)">Typ dokumentu</label>
+          <select id="docType" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);font-size:12px;background:var(--surface)">
+            <option value="">— wybierz —</option>
+            <option value="PO">Zamówienie (PO)</option>
+            <option value="PI">Proforma Invoice</option>
+            <option value="CI">Commercial Invoice</option>
+            <option value="PL">Packing List</option>
+            <option value="SAD">SAD / Celny</option>
+            <option value="BL">B/L Konosament</option>
+            <option value="COO">Certyfikat pochodzenia</option>
+            <option value="inne">Inne</option>
+          </select>
+        </div>
+        <button type="button" class="btn-primary" onclick="uploadDoc()" style="white-space:nowrap">⬆ Wgraj</button>
+      </div>
+      <div id="uploadStatus" style="display:none;margin-top:8px;font-size:12px;padding:6px 10px;border-radius:6px"></div>
+    </div>
+
+    <!-- Document list -->
+    <div id="docsList" style="display:flex;flex-direction:column;gap:6px;min-height:60px">
+      <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">⏳ Ładowanie…</div>
+    </div>
+
+    <div class="modal-footer" style="margin-top:12px">
+      <a id="docsZipBtn" href="#" class="btn-primary" style="text-decoration:none">⬇ Pobierz wszystko (ZIP)</a>
+      <button type="button" class="btn-secondary" onclick="closeDocs()">Zamknij</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Preview shipment ref
+document.getElementById('nPO').addEventListener('input', previewRef);
+document.getElementById('nDate').addEventListener('input', previewRef);
+// FIX 18: Enter key submits the new shipment form
+document.getElementById('nPO').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') createShipment();
+});
+function previewRef() {
+  const po = document.getElementById('nPO').value.trim();
+  const d  = document.getElementById('nDate').value;
+  const el = document.getElementById('newPreview');
+  // FIX 9: guard against empty PO or date
+  if (!po) { el.style.display='none'; return; }
+  if (!d)  { el.textContent = ''; el.style.display='none'; return; }
+  let dateStr = '';
+  const [y,m,day] = d.split('-');
+  dateStr = `${day}-${m}-${y}`;
+  el.textContent = `📦 ${dateStr}/${po}`;
+  el.style.display = 'block';
+}
+
+async function createShipment() {
+  const po = document.getElementById('nPO').value.trim();
+  if (!po) { toast('Podaj numer PO', 'error'); return; }
+  const d = document.getElementById('nDate').value;
+  let dateStr = '';
+  if (d) {
+    const [y,m,day] = d.split('-');
+    dateStr = `${day}-${m}-${y}`;
+  }
+  const payload = {
+    po_number: po,
+    date: dateStr || null,
+    supplier_name: document.getElementById('nSupplier').value.trim(),
+    notes: document.getElementById('nNotes').value.trim(),
+  };
+  const res = await fetch('/api/shipments', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (data.ok) {
+    document.getElementById('newModal').classList.remove('open');
+    if (data.existed) { toast(`Dostawa dla PO ${po} już istnieje: ${data.shipment_ref}`, 'warn'); return; }
+    location.reload();
+  } else toast(data.error || 'Błąd zapisu', 'error');
+}
+
+async function updateStatus(ref, select) {
+  // FIX 10: disable dropdown during save; revert on error
+  const status = select.value;
+  const orig   = select.dataset.orig || select.value;
+  select.dataset.orig = status;  // track the new committed value
+  select.disabled = true;
+  try {
+    const res = await fetch(`/api/shipments/${encodeURIComponent(ref)}`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status})
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      select.value = orig;       // revert on error
+      select.dataset.orig = orig;
+      toast(data.error || 'Błąd aktualizacji statusu', 'error');
+    }
+  } catch (e) {
+    select.value = orig;
+    select.dataset.orig = orig;
+    toast('Błąd aktualizacji statusu', 'error');
+  } finally {
+    select.disabled = false;
+  }
+}
+
+async function validateFile() {
+  const po = document.getElementById('vPO').value.trim();
+  const file = document.getElementById('vFile').files[0];
+  const el = document.getElementById('valResult');
+  if (!po || !file) { toast('Podaj numer PO i wybierz plik PDF', 'error'); return; }
+  const fd = new FormData();
+  fd.append('po_number', po);
+  fd.append('file', file);
+  el.innerHTML = '<div style="color:var(--muted);font-size:13px">Sprawdzam…</div>';
+  el.style.display = 'block';
+  try {
+    const res = await fetch('/api/shipments/validate-file', {method:'POST', body:fd});
+    const d = await res.json();
+    const cls = d.ok ? 'val-ok' : 'val-warn';
+    el.innerHTML = `<div class="val-result ${cls}">
+      <div style="font-weight:700;margin-bottom:4px">${d.ok ? '✅ Plik poprawny' : '⚠️ Wykryto problem'}</div>
+      <div class="val-row">
+        <span>${d.filename_ok ? '✅' : '❌'} <strong>Nazwa pliku:</strong> ${escHtml(d.filename)}</span>
+      </div>
+      <div class="val-row">
+        <span>${d.content_ok ? '✅' : '❌'} <strong>Treść dokumentu:</strong> ${d.content_ok ? `numer ${escHtml(d.po_number)} znaleziony` : `numer ${escHtml(d.po_number)} NIE znaleziony`}</span>
+      </div>
+      ${d.warning ? `<div style="margin-top:6px;font-size:12px">${escHtml(d.warning)}</div>` : ''}
+    </div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="val-result val-warn">Błąd: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function filterRows() {
+  const q = document.getElementById('searchBox').value.toLowerCase();
+  const st = document.getElementById('statusFilter').value;
+  document.querySelectorAll('#tableBody tr').forEach(row => {
+    if (!row.dataset.status) return;
+    const mQ = !q || row.dataset.search.toLowerCase().includes(q);
+    const mS = !st || row.dataset.status === st;
+    row.style.display = (mQ && mS) ? '' : 'none';
+  });
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// FIX 12: warn before closing modal if user has entered data
+document.getElementById('newModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('newModal')) {
+    const hasUnsavedChanges = document.getElementById('nPO').value.trim()
+                           || document.getElementById('nSupplier').value.trim()
+                           || document.getElementById('nNotes').value.trim();
+    if (hasUnsavedChanges) {
+      confirmModal('Masz niezapisane zmiany. Czy na pewno chcesz zamknąć?', () => {
+        document.getElementById('newModal').classList.remove('open');
+      });
+      return;
+    }
+    document.getElementById('newModal').classList.remove('open');
+  }
+});
+
+// Prefill today's date
+document.getElementById('nDate').valueAsDate = new Date();
+previewRef();
+
+// ── Documents panel ───────────────────────────────────────────────────────────
+let _currentDocRef = '';
+let _currentDocPO  = '';
+
+function openDocs(ref, po) {
+  _currentDocRef = ref;
+  _currentDocPO  = po;
+  document.getElementById('docsSubtitle').textContent = `PO: ${po}  |  Ref: ${ref}`;
+  document.getElementById('docsZipBtn').href = `/api/shipments/${encodeURIComponent(ref)}/documents/zip`;
+  document.getElementById('uploadStatus').style.display = 'none';
+  document.getElementById('docFile').value = '';
+  document.getElementById('docsModal').classList.add('open');
+  loadDocs();
+}
+function closeDocs() {
+  document.getElementById('docsModal').classList.remove('open');
+}
+
+async function loadDocs() {
+  const el = document.getElementById('docsList');
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">⏳ Ładowanie…</div>';
+  try {
+    const res = await fetch(`/api/shipments/${encodeURIComponent(_currentDocRef)}/documents`);
+    const data = await res.json();
+    if (!res.ok) { el.innerHTML = `<div style="color:red;padding:10px">${escHtml(data.error)}</div>`; return; }
+    if (!data.documents.length) {
+      el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:13px">📭 Brak dokumentów. Wgraj pierwszy plik powyżej.</div>';
+      return;
+    }
+    el.innerHTML = data.documents.map(d => `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+        <span style="font-size:20px">${docIcon(d.doc_type)}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(d.original_name)}</div>
+          <div style="font-size:11px;color:var(--muted)">${escHtml(d.doc_type || 'bez typu')} &nbsp;·&nbsp; ${formatBytes(d.file_size)} &nbsp;·&nbsp; ${escHtml(d.uploaded_at.slice(0,16))} &nbsp;·&nbsp; <em>${d.source === 'auto' ? '🤖 auto' : '👤 ręcznie'}</em></div>
+        </div>
+        <a href="/api/shipments/${encodeURIComponent(_currentDocRef)}/documents/${encodeURIComponent(d.filename)}" class="btn-sm" download title="Pobierz">⬇</a>
+        <button type="button" class="btn-sm" onclick="deleteDoc(${d.id})" title="Usuń" aria-label="Usuń dokument" style="color:#ef4444">🗑</button>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = `<div style="color:red;padding:10px">Błąd: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function docIcon(t) {
+  const m = {PO:'📋',PI:'📄',CI:'🧾',PL:'📦',SAD:'🛃',BL:'🚢',COO:'📜'};
+  return m[t] || '📎';
+}
+function formatBytes(b) {
+  if (!b) return '—';
+  if (b < 1024) return b + ' B';
+  if (b < 1024*1024) return (b/1024).toFixed(0) + ' KB';
+  return (b/1024/1024).toFixed(1) + ' MB';
+}
+
+async function uploadDoc() {
+  const file = document.getElementById('docFile').files[0];
+  const statusEl = document.getElementById('uploadStatus');
+  if (!file) { statusEl.style.display='block'; statusEl.style.background='#fef3c7'; statusEl.textContent='Wybierz plik PDF.'; return; }
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('doc_type', document.getElementById('docType').value);
+  statusEl.style.display='block'; statusEl.style.background='var(--surface2)';
+  statusEl.textContent = '⏳ Wgrywanie…';
+  try {
+    const res = await fetch(`/api/shipments/${encodeURIComponent(_currentDocRef)}/documents`, {method:'POST', body:fd});
+    const data = await res.json();
+    if (!res.ok) { statusEl.style.background='#fee2e2'; statusEl.textContent='❌ ' + (data.error||'Błąd'); return; }
+    statusEl.style.background='#d1fae5'; statusEl.textContent='✅ Plik wgrany.';
+    document.getElementById('docFile').value = '';
+    loadDocs();
+  } catch(e) {
+    statusEl.style.background='#fee2e2'; statusEl.textContent='❌ Błąd sieci.';
+  }
+}
+
+async function deleteDoc(id) {
+  confirmModal('Usunąć dokument?', async () => {
+    try {
+      const res = await fetch(`/api/shipments/${encodeURIComponent(_currentDocRef)}/documents/${id}`, {method:'DELETE'});
+      const data = await res.json();
+      if (!res.ok) { toast(data.error||'Błąd', 'error'); return; }
+      loadDocs();
+    } catch(e) { toast('Błąd sieci', 'error'); }
+  }, {okLabel:'Usuń', danger:true});
+}
+
+document.getElementById('docsModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('docsModal')) closeDocs();
+});
+
+// FIX 11: clear uploadStatus message when user picks a new file for retry
+document.getElementById('docFile').addEventListener('change', function() {
+  const statusEl = document.getElementById('uploadStatus');
+  statusEl.textContent = '';
+  statusEl.style.display = 'none';
+  statusEl.className = '';
+});
+</script>
+{% endblock %}

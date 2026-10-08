@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Stany magazynu — DocCompare{% endblock %}
+
+{% block extra_head %}
+<style>
+.ws-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:18px}
+table.ws{width:100%;border-collapse:collapse;font-size:13px}
+table.ws th,table.ws td{border:1px solid var(--border);padding:7px 10px;text-align:left}
+table.ws th{background:var(--accent-bg,#eff6ff);font-size:11px;font-weight:700}
+.ws-mono{font-family:var(--mono)}
+.ws-empty{color:var(--muted);font-style:italic;padding:24px;text-align:center}
+[x-cloak]{display:none!important}
+</style>
+{% endblock %}
+
+{% block page_title %}Stany magazynu{% endblock %}
+
+{% block content %}
+<div x-data="stockApp()" x-init="load()" x-cloak>
+  <div class="page-header">
+    <h1>📦 Stany magazynu (import)</h1>
+    <p>Zaimportuj plik <b>XLSX/CSV</b> z kolumnami: <span class="ws-mono">REF</span>,
+       <span class="ws-mono">Stan magazynowy</span>, <span class="ws-mono">Zużycie miesięczne</span>,
+       <span class="ws-mono">W dostawach wychodzących</span>,
+       <span class="ws-mono">W zleceniach wychodzących-potwierdzonych</span>,
+       <span class="ws-mono">W zleceniach wychodzących-niepotwierdzonych</span>.
+       Dane zasilają panel analityczny (Dostawy → Panel analityczny): <b>Saldo = stan + w drodze − wych. w dostawach − wych. potwierdzone</b>,
+       a „na ile dni" = saldo ÷ (zużycie ÷ 30,4).</p>
+  </div>
+
+  {% if role in ['manager','superuser','admin'] %}
+  <div class="ws-box" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+    <input type="file" accept=".xlsx,.csv" x-ref="file" @change="pick($event)">
+    <button class="btn btn-primary" @click="upload()" :disabled="!file || busy" x-text="busy?'Importuję…':'Importuj'"></button>
+    <span x-show="msg" x-text="msg" style="font-size:12px" :style="ok?'color:#16a34a':'color:var(--error)'"></span>
+  </div>
+  {% endif %}
+
+  <template x-if="items.length === 0">
+    <div class="ws-empty">Brak stanów. Zaimportuj plik powyżej.</div>
+  </template>
+  <template x-if="items.length">
+    <table class="ws">
+      <thead><tr><th>REF</th><th style="text-align:right">Stan</th><th style="text-align:right">Zużycie/mies</th>
+        <th style="text-align:right">Wych. dost.</th><th style="text-align:right">Wych. potw.</th>
+        <th style="text-align:right">Wych. niepotw.</th><th>Aktualizacja</th></tr></thead>
+      <tbody>
+        <template x-for="s in items" :key="s.ref_norm">
+          <tr>
+            <td class="ws-mono" x-text="s.ref_code || s.ref_norm"></td>
+            <td class="ws-mono" style="text-align:right" x-text="(s.on_hand!=null)? s.on_hand.toLocaleString('pl-PL'):'—'"></td>
+            <td class="ws-mono" style="text-align:right" x-text="(s.monthly_usage!=null)? s.monthly_usage.toLocaleString('pl-PL'):'—'"></td>
+            <td class="ws-mono" style="text-align:right" x-text="(s.out_deliveries!=null)? s.out_deliveries.toLocaleString('pl-PL'):'—'"></td>
+            <td class="ws-mono" style="text-align:right" x-text="(s.out_confirmed!=null)? s.out_confirmed.toLocaleString('pl-PL'):'—'"></td>
+            <td class="ws-mono" style="text-align:right" x-text="(s.out_unconfirmed!=null)? s.out_unconfirmed.toLocaleString('pl-PL'):'—'"></td>
+            <td style="color:var(--muted);font-size:12px" x-text="s.updated_at"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </template>
+</div>
+
+<script>
+function stockApp(){
+  return {
+    items:[], file:null, busy:false, msg:'', ok:false,
+    async load(){ try{ const r=await fetch('/api/warehouse/stock'); const d=await r.json(); this.items=d.items||[]; }catch(e){} },
+    pick(e){ this.file = e.target.files[0] || null; this.msg=''; },
+    async upload(){
+      if(!this.file) return;
+      this.busy=true; this.msg='';
+      try{
+        const fd=new FormData(); fd.append('file', this.file);
+        const r=await fetch('/api/warehouse/stock/import',{method:'POST',body:fd});
+        const d=await r.json();
+        if(!r.ok){ this.msg=d.error||'Błąd importu'; this.ok=false; }
+        else { this.msg='Zaimportowano: '+(d.imported||0)+(d.skipped?(' (pominięto '+d.skipped+')'):''); this.ok=true;
+               this.file=null; if(this.$refs.file) this.$refs.file.value=''; this.load(); }
+      }catch(e){ this.msg='Błąd połączenia'; this.ok=false; }
+      finally{ this.busy=false; }
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}Zatwierdzanie SAD — DocCompare{% endblock %}
+{% block extra_head %}
+<style>
+  .sub { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+
+  /* Count cards */
+  .count-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 28px; }
+  .count-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; display: flex; align-items: center; gap: 14px; }
+  .count-icon { font-size: 22px; }
+  .count-num { font-size: 26px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+  .count-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .count-pending .count-num { color: var(--warn); }
+  .count-approved .count-num { color: var(--ok); }
+  .count-rejected .count-num { color: var(--error); }
+
+  /* Table */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 9px 14px; font-size: 10px; font-family: var(--mono); letter-spacing: 1px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surface2); white-space: nowrap; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+
+  /* Status badges */
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; font-family: var(--mono); white-space: nowrap; }
+  .badge-pending  { background: rgba(217,119,6,.12); color: var(--warn); border: 1px solid rgba(217,119,6,.25); }
+  .badge-approved { background: rgba(5,150,105,.12); color: var(--ok);   border: 1px solid rgba(5,150,105,.25); }
+  .badge-rejected { background: rgba(220,38,38,.12); color: var(--error); border: 1px solid rgba(220,38,38,.25); }
+
+  /* Action buttons */
+  .btn-approve { background: rgba(5,150,105,.12); color: var(--ok); border: 1px solid rgba(5,150,105,.3); border-radius: 7px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .btn-approve:hover { background: var(--ok); color: #fff; border-color: var(--ok); }
+  .btn-reject  { background: rgba(220,38,38,.12); color: var(--error); border: 1px solid rgba(220,38,38,.3); border-radius: 7px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .btn-reject:hover  { background: var(--error); color: #fff; border-color: var(--error); }
+  .btn-actions { display: flex; gap: 6px; }
+
+  /* File name chip */
+  .file-chip { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Empty state */
+  .empty-wrap { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-wrap .e-icon { font-size: 48px; margin-bottom: 14px; }
+  .empty-wrap p { font-size: 14px; }
+
+  /* Comparison ID link */
+  .cid-link { font-family: var(--mono); font-size: 11px; color: var(--accent); text-decoration: none; }
+  .cid-link:hover { text-decoration: underline; }
+
+  /* Note text */
+  .note-text { font-size: 12px; color: var(--muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 900; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; width: 400px; max-width: 94vw; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+  .modal-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+  .modal-label { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-bottom: 4px; display: block; }
+  .modal-textarea { width: 100%; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text); padding: 9px 11px; font-size: 13px; font-family: inherit; resize: vertical; min-height: 80px; outline: none; }
+  .modal-textarea:focus { border-color: var(--accent); }
+  .modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .modal-cancel { padding: 7px 16px; border: 1px solid var(--border); border-radius: 7px; background: none; color: var(--muted); cursor: pointer; font-size: 13px; }
+  .modal-confirm-approve { padding: 7px 18px; background: var(--ok); border: none; border-radius: 7px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .modal-confirm-approve:hover { opacity: .88; }
+  .modal-confirm-reject  { padding: 7px 18px; background: var(--error); border: none; border-radius: 7px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .modal-confirm-reject:hover  { opacity: .88; }
+
+  @media (max-width: 768px) {
+    .count-cards { grid-template-columns: 1fr; }
+    .file-chip { max-width: 120px; }
+  }
+</style>
+{% endblock %}
+
+{% block page_title %}Odprawy celne{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>🛃 Zgłoszenia celne SAD — weryfikacja i zatwierdzanie</h1>
+  <p class="sub">Przeglądaj porównania z typem dokumentu SAD, zatwierdzaj lub odrzucaj zgłoszenia celne.</p>
+</div>
+
+{% set pending_count  = items | selectattr("approval_status", "in", ["pending", None, ""])  | list | length %}
+{% set approved_count = items | selectattr("approval_status", "equalto", "approved") | list | length %}
+{% set rejected_count = items | selectattr("approval_status", "equalto", "rejected") | list | length %}
+
+<div class="count-cards">
+  <div class="count-card count-pending">
+    <div class="count-icon">⏳</div>
+    <div>
+      <div class="count-num">{{ pending_count }}</div>
+      <div class="count-lbl">Oczekuje na weryfikację</div>
+    </div>
+  </div>
+  <div class="count-card count-approved">
+    <div class="count-icon">✅</div>
+    <div>
+      <div class="count-num">{{ approved_count }}</div>
+      <div class="count-lbl">Zatwierdzone</div>
+    </div>
+  </div>
+  <div class="count-card count-rejected">
+    <div class="count-icon">❌</div>
+    <div>
+      <div class="count-num">{{ rejected_count }}</div>
+      <div class="count-lbl">Odrzucone</div>
+    </div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  {% if items %}
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Lp.</th>
+        <th scope="col">Data</th>
+        <th scope="col">Pliki</th>
+        <th scope="col">Zgłaszający</th>
+        <th scope="col">Status</th>
+        <th scope="col">Zatwierdzający</th>
+        <th scope="col">Notatka</th>
+        <th scope="col">Akcje</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>
+          <a href="/history#{{ item.id }}" class="cid-link" title="Przejdź do historii porównania #{{ item.id }}">#{{ item.id }}</a>
+        </td>
+        <td>
+          <span class="ts-rel" data-ts="{{ item.created_at }}">{{ item.created_at }}</span>
+        </td>
+        <td>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span class="file-chip" title="{{ item.file_a }}">📄 {{ item.file_a }}</span>
+            <span class="file-chip" title="{{ item.file_b }}">📄 {{ item.file_b }}</span>
+          </div>
+        </td>
+        <td>{{ item.submitted_by or '—' }}</td>
+        <td>
+          {% set st = item.approval_status or 'pending' %}
+          {% if st == 'approved' %}
+            <span class="badge badge-approved">✓ Zatwierdzone</span>
+          {% elif st == 'rejected' %}
+            <span class="badge badge-rejected">✕ Odrzucone</span>
+          {% else %}
+            <span class="badge badge-pending">⏳ Oczekuje</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if item.approved_by_name %}
+            <div>{{ item.approved_by_name }}</div>
+            {% if item.approved_at %}
+              <div style="font-size:11px;color:var(--muted)" class="ts-rel" data-ts="{{ item.approved_at }}">{{ item.approved_at }}</div>
+            {% endif %}
+          {% else %}
+            <span style="color:var(--muted)">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if item.approval_note %}
+            <span class="note-text" title="{{ item.approval_note }}">{{ item.approval_note }}</span>
+          {% else %}
+            <span style="color:var(--muted);font-size:12px">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if role in ['admin', 'superuser', 'manager'] %}
+          <div class="btn-actions">
+            <button type="button" class="btn-approve" onclick="openModal({{ item.id }}, 'approved')">Zatwierdź</button>
+            <button type="button" class="btn-reject"  onclick="openModal({{ item.id }}, 'rejected')">Odrzuć</button>
+          </div>
+          {% else %}
+            <span style="color:var(--muted);font-size:12px">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-wrap">
+    <div class="e-icon">🛃</div>
+    <p>Brak zgłoszeń SAD. Porównania z typem dokumentu <strong>SAD</strong> pojawią się tutaj automatycznie.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Approval / Reject modal -->
+<div class="modal-overlay" id="approvalModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle">Zatwierdź porównanie</div>
+    <div class="modal-sub" id="modalSub">Porównanie #<span id="modalCid"></span></div>
+    <label class="modal-label" for="modalNote">NOTATKA (opcjonalnie)</label>
+    <textarea class="modal-textarea" id="modalNote" placeholder="Dodaj komentarz do decyzji…"></textarea>
+    <div class="modal-btns">
+      <button type="button" class="modal-cancel" onclick="closeModal()">Anuluj</button>
+      <button type="button" id="modalConfirmBtn" onclick="submitDecision()">Potwierdź</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var _modalCid = null;
+var _modalVerdict = null;
+
+function openModal(cid, verdict) {
+  _modalCid = cid;
+  _modalVerdict = verdict;
+  var isApprove = verdict === 'approved';
+  document.getElementById('modalTitle').textContent = isApprove ? '✅ Zatwierdź porównanie SAD' : '❌ Odrzuć porównanie SAD';
+  var sub = document.getElementById('modalSub');
+  sub.textContent = 'Porównanie #';
+  var cidSpan = document.createElement('span');
+  cidSpan.id = 'modalCid';
+  cidSpan.textContent = cid;
+  sub.appendChild(cidSpan);
+  document.getElementById('modalNote').value = '';
+  var btn = document.getElementById('modalConfirmBtn');
+  btn.textContent = isApprove ? 'Zatwierdź' : 'Odrzuć';
+  btn.className = isApprove ? 'modal-confirm-approve' : 'modal-confirm-reject';
+  document.getElementById('approvalModal').classList.add('open');
+  document.getElementById('modalNote').focus();
+}
+
+function closeModal() {
+  document.getElementById('approvalModal').classList.remove('open');
+  _modalCid = null;
+  _modalVerdict = null;
+}
+
+document.getElementById('approvalModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+async function submitDecision() {
+  if (!_modalCid || !_modalVerdict) return;
+  var note = document.getElementById('modalNote').value.trim();
+  var btn = document.getElementById('modalConfirmBtn');
+  btn.disabled = true;
+  btn.textContent = 'Zapisywanie…';
+  try {
+    var r = await fetch('/api/comparison/' + _modalCid + '/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: _modalVerdict, note: note })
+    });
+    var d = await r.json();
+    if (r.ok && d.ok) {
+      closeModal();
+      toast(_modalVerdict === 'approved' ? 'Porównanie zatwierdzone.' : 'Porównanie odrzucone.', _modalVerdict === 'approved' ? 'ok' : 'warn');
+      setTimeout(function() { location.reload(); }, 800);
+    } else {
+      toast(d.error || 'Błąd serwera', 'error');
+      btn.disabled = false;
+      btn.textContent = _modalVerdict === 'approved' ? 'Zatwierdź' : 'Odrzuć';
+    }
+  } catch (e) {
+    toast('Błąd połączenia: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = _modalVerdict === 'approved' ? 'Zatwierdź' : 'Odrzuć';
+  }
+}
+
+// Allow Enter key in textarea to not submit, but Ctrl+Enter can submit
+document.getElementById('modalNote').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && e.ctrlKey) { submitDecision(); }
+  if (e.key === 'Escape') { closeModal(); }
+});
+</script>
+{% endblock %}

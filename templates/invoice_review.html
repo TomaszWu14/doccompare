@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block page_title %}Faktura — weryfikacja{% endblock %}
+{% block content %}
+<div x-data="invoiceReview({{ items|tojson }}, {{ job.id }})" class="grid grid-cols-2 gap-4 h-full">
+  <div class="border rounded overflow-hidden">
+    <iframe src="{{ url_for('invoices.pdf', job_id=job.id) }}" class="w-full h-[85vh]"></iframe>
+  </div>
+  <div class="overflow-y-auto h-[85vh] pr-1">
+    <h1 class="text-lg font-semibold mb-1">{{ job.filename }} — {{ job.invoice_number or "—" }}</h1>
+    <p class="text-sm text-slate-500 mb-2">Dostawca: {{ job.supplier_code or "—" }} · Status: {{ job.status }}</p>
+    {% if job.error %}<p class="text-red-600 mb-2">{{ job.error }}</p>{% endif %}
+
+    <table class="w-full text-sm border-collapse mb-3">
+      <thead>
+        <tr class="text-left border-b">
+          <th class="py-1">REF</th><th>Master REF</th><th>Opis</th><th>Ilość</th><th>Status</th><th>Pomiń</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="(it, idx) in items" :key="idx">
+          <tr class="border-b"
+              :class="{
+                'bg-green-50': it.match_status === 'matched',
+                'bg-amber-50': it.match_status === 'ambiguous',
+                'bg-red-50': it.match_status === 'unmatched'
+              }">
+            <td class="py-1" x-text="it.raw_ref"></td>
+            <td>
+              <template x-if="it.match_status === 'ambiguous'">
+                <input type="text" x-model="it.master_ref" class="border rounded px-1.5 py-0.5 w-28 text-sm">
+              </template>
+              <template x-if="it.match_status !== 'ambiguous'">
+                <span x-text="it.master_ref"></span>
+              </template>
+            </td>
+            <td x-text="it.name_pl"></td>
+            <td x-text="it.qty"></td>
+            <td>
+              <span class="badge"
+                    :class="{
+                      'badge-ok': it.match_status === 'matched',
+                      'badge-warn': it.match_status === 'ambiguous',
+                      'badge-err': it.match_status === 'unmatched'
+                    }"
+                    x-text="it.match_status"></span>
+            </td>
+            <td class="text-center"><input type="checkbox" x-model="it.skipped"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+
+    <div class="flex items-center gap-2">
+      <button class="px-3 py-1.5 bg-slate-600 text-white rounded hover:bg-slate-700" @click="save(false)">Zapisz</button>
+      <button class="px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700" @click="save(true)">Zatwierdź</button>
+      <template x-if="confirmed">
+        <a class="text-indigo-600 underline ml-2" :href="exportUrl">Pobierz Excel</a>
+      </template>
+    </div>
+    <p x-show="msg" x-text="msg" class="mt-2 text-sm" :class="ok ? 'text-green-700' : 'text-red-600'"></p>
+  </div>
+</div>
+<script>
+function invoiceReview(initialItems, jobId) {
+  return {
+    items: initialItems,
+    jobId: jobId,
+    msg: "",
+    ok: true,
+    confirmed: {{ 'true' if job.status == 'confirmed' else 'false' }},
+    exportUrl: "{{ url_for('invoices.export', batch_id=job.batch_id, job_id=job.id) }}",
+    save(confirm) {
+      // CSRF: nagłówek dokładany automatycznie przez override window.fetch w base.html
+      fetch(`/invoices/review/${this.jobId}`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({items: this.items, confirm: confirm})
+      }).then(r => r.json()).then(d => {
+        this.msg = d.msg;
+        this.ok = !!d.ok;
+        if (confirm && d.ok) this.confirmed = true;
+      });
+    }
+  };
+}
+</script>
+{% endblock %}

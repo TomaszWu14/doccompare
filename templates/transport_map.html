@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Trasa {{ container }} — DocCompare{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='js/vendor/leaflet/leaflet.css') }}">
+<style>
+.map-head { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:14px; }
+.map-meta { display:flex; gap:18px; flex-wrap:wrap; font-size:13px; color:var(--muted); margin-top:6px; }
+.map-meta b { color:var(--text); font-weight:600; }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px;
+       font-size:13px; font-weight:600; cursor:pointer; border:1px solid var(--border);
+       background:var(--surface); color:var(--text); text-decoration:none; }
+.btn:hover { border-color:var(--muted); }
+#map { height:70vh; min-height:440px; width:100%; border:1px solid var(--border);
+       border-radius:12px; overflow:hidden; z-index:0; }
+.legend { display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--muted); }
+.legend span { display:inline-flex; align-items:center; gap:6px; }
+.legend i { width:14px; height:14px; border-radius:50%; display:inline-block; }
+.map-pin { font-size:22px; line-height:22px; text-align:center; filter:drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+.map-dot { border-radius:50%; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+.lf-pop b { display:block; font-size:13px; margin-bottom:2px; }
+.lf-pop small { color:#555; }
+.map-empty { padding:48px 20px; text-align:center; color:var(--muted); border:1px dashed var(--border);
+             border-radius:12px; background:var(--surface); }
+</style>
+{% endblock %}
+
+{% block page_title %}Trasa kontenera{% endblock %}
+
+{% block content %}
+<div class="map-head">
+  <div>
+    <h1 style="margin:0">🗺️ Trasa kontenera <span style="font-family:var(--mono)">{{ container }}</span></h1>
+    <div class="map-meta">
+      {% if vessel %}<div>🚢 Statek: <b>{{ vessel }}</b></div>{% endif %}
+      {% if carrier %}<div>Armator: <b>{{ carrier }}</b></div>{% endif %}
+      {% if track_status %}<div>Status: <b>{{ track_status }}</b></div>{% endif %}
+      <div>Trasa: <b>{{ origin_port or '?' }} → {{ dest_port or '?' }}</b></div>
+      {% if departure %}<div>🚢 Wypłynięcie: <b>{{ departure }}</b></div>{% endif %}
+      {% if transit_days is not none %}<div>⏱️ W trasie: <b>{{ transit_days }} dni</b></div>{% endif %}
+      {% if eta %}<div>ETA: <b>{{ eta[:10] }}</b></div>{% endif %}
+      {% if last_checked %}<div>Aktualizacja: {{ last_checked[:16] }}</div>{% endif %}
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button type="button" id="refreshBtn" class="btn" onclick="refreshPos(this)" title="Pobierz aktualną pozycję z API">🔄 Odśwież pozycję</button>
+    <a href="/transport/queue" class="btn">← Kolejka transportu</a>
+  </div>
+</div>
+
+<div id="map"></div>
+<div id="mapEmpty" class="map-empty" style="display:none">
+  <div style="font-size:40px;margin-bottom:10px">🛰️</div>
+  <div style="font-weight:600;color:var(--text)">Brak danych pozycyjnych dla tego kontenera</div>
+  <div style="margin-top:4px">Odśwież tracking w kolejce transportu — pozycja pojawi się po pierwszym odczycie z API.</div>
+</div>
+
+<div class="legend">
+  <span><i style="background:#16a34a"></i> Port załadunku</span>
+  <span><i style="background:#2563eb"></i> Przystanek / przeładunek</span>
+  <span>🚢 Bieżąca pozycja</span>
+  <span><i style="background:#dc2626"></i> Port docelowy</span>
+</div>
+
+<script src="{{ url_for('static', filename='js/vendor/leaflet/leaflet.js') }}"></script>
+<script>
+const ROUTE = {{ route_data | tojson }};
+const VESSEL = {{ vessel | tojson }};
+
+(function () {
+  const pts = (ROUTE.points || []).filter(p => p.lat != null && p.lng != null);
+  const cur = ROUTE.current;
+  const path = ROUTE.path || [];
+
+  if (!pts.length && !cur && !path.length) {
+    document.getElementById('map').style.display = 'none';
+    document.getElementById('mapEmpty').style.display = 'block';
+    return;
+  }
+
+  const map = L.map('map', { scrollWheelZoom: true, worldCopyJump: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18, attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  const bounds = [];
+
+  function dotIcon(color, big) {
+    const s = big ? 18 : 13;
+    return L.divIcon({
+      className: '', iconSize: [s, s], iconAnchor: [s/2, s/2],
+      html: `<span class="map-dot" style="width:${s}px;height:${s}px;background:${color};display:block"></span>`
+    });
+  }
+  function emojiIcon(emoji) {
+    return L.divIcon({
+      className: '', iconSize: [26, 26], iconAnchor: [13, 13],
+      html: `<span class="map-pin">${emoji}</span>`
+    });
+  }
+  const COLORS = { origin: '#16a34a', dest: '#dc2626', stop: '#2563eb' };
+
+  // Linia trasy: realna geometria morska jeśli jest, inaczej linia prowadzona
+  // przez faktyczne punkty (port → przystanki → bieżąca pozycja → cel).
+  const ordered = (ROUTE.line && ROUTE.line.length >= 2) ? ROUTE.line : pts.map(p => [p.lat, p.lng]);
+  let line = path.length >= 2 ? path : ordered;
+  const realGeom = path.length >= 2;
+  if (line.length >= 2) {
+    L.polyline(line, {
+      color: '#2563eb', weight: 3, opacity: .7,
+      dashArray: realGeom ? null : '6 7'   // przerywana = przybliżona, ciągła = realna trasa
+    }).addTo(map);
+    line.forEach(c => bounds.push(c));
+  }
+
+  // Markery portów / przystanków
+  pts.forEach(p => {
+    const color = COLORS[p.type] || COLORS.stop;
+    const big = (p.type === 'origin' || p.type === 'dest');
+    L.marker([p.lat, p.lng], { icon: dotIcon(color, big) })
+      .addTo(map)
+      .bindPopup(`<div class="lf-pop"><b>${escapeHtml(p.name || p.label || '')}</b>`
+        + `<small>${escapeHtml(p.label || '')}${p.date ? ' · ' + escapeHtml(p.date) : ''}</small></div>`);
+    bounds.push([p.lat, p.lng]);
+  });
+
+  // Bieżąca pozycja statku
+  if (cur && cur.lat != null) {
+    const title = VESSEL ? escapeHtml(VESSEL) : 'Bieżąca pozycja';
+    L.marker([cur.lat, cur.lng], { icon: emojiIcon('🚢'), zIndexOffset: 1000 })
+      .addTo(map)
+      .bindPopup(`<div class="lf-pop"><b>🚢 ${title}</b><small>Bieżąca pozycja statku</small></div>`)
+      .openPopup();
+    bounds.push([cur.lat, cur.lng]);
+  }
+
+  if (bounds.length === 1) {
+    map.setView(bounds[0], 6);
+  } else if (bounds.length > 1) {
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 9 });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+})();
+
+// Pobierz aktualną pozycję z API i przeładuj mapę.
+const CONTAINER = {{ container | tojson }};
+async function refreshPos(btn) {
+  const old = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Odświeżam…'; }
+  try {
+    const res = await fetch('/api/tracking/track', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ numbers: [CONTAINER], provider: 'auto' })
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || d.error) {
+      if (window.toast) toast(d.error || 'Błąd odświeżania pozycji', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = old; }
+      return;
+    }
+    location.reload();
+  } catch (e) {
+    if (window.toast) toast('Błąd sieci: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = old; }
+  }
+}
+
+// Auto-odświeżenie pozycji przy otwarciu, gdy dane > 60 min. Guard w sessionStorage
+// chroni przed pętlą, gdyby odświeżenie nie zaktualizowało znacznika czasu.
+(function () {
+  const stale = {{ 'true' if stale else 'false' }};
+  const guard = 'mapfresh_' + CONTAINER;
+  if (stale && !sessionStorage.getItem(guard)) {
+    sessionStorage.setItem(guard, String(Date.now()));
+    refreshPos(document.getElementById('refreshBtn'));
+  } else if (!stale) {
+    sessionStorage.removeItem(guard);  // świeże dane → pozwól na kolejne auto-odświeżenie później
+  }
+})();
+</script>
+{% endblock %}

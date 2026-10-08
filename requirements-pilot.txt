@@ -1,0 +1,6 @@
+# Pilot ML — NIE instalowac na prodzie; patrz tools/pilot_ml/
+docling
+transformers
+torch
+pillow
+pytesseract

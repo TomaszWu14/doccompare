@@ -1,0 +1,494 @@
+{% extends "base.html" %}
+{% block title %}Baza produktów — DocCompare{% endblock %}
+
+{% block extra_head %}
+<style>
+
+.prod-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.prod-search {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+}
+.prod-search:focus { outline: none; border-color: var(--accent); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  transition: all .12s;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--muted); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { opacity: .88; }
+.btn-danger  { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.btn-danger:hover { background: #fca5a5; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+
+.prod-table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: auto;
+}
+.prod-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 700px;
+}
+.prod-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.prod-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.prod-table tr:last-child td { border-bottom: none; }
+.prod-table tr:hover td { background: var(--surface2); }
+
+.ref-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+.ean-mono { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.unit-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--surface2);
+  color: var(--muted);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+
+/* Pagination */
+.prod-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.prod-pager button {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.prod-pager button:disabled { opacity: .4; cursor: default; }
+.prod-pager button:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
+
+/* Modal overlay */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 9000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  width: 540px;
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.22);
+}
+.modal-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; color: var(--text); }
+.form-grid { display: grid; gap: 14px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-group label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px; }
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.form-group textarea { resize: vertical; min-height: 70px; }
+.modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+.import-hint {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 8px 12px;
+  background: var(--surface2);
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+.empty-state {
+  text-align: center;
+  padding: 52px 20px;
+  color: var(--muted);
+}
+.empty-state .es-icon { font-size: 44px; margin-bottom: 12px; }
+.empty-state h3 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.empty-state p  { font-size: 13px; }
+
+.spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block page_title %}Produkty{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px">
+
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div>
+      <h1>📦 Baza produktów</h1>
+      <p>Centralna baza kodów REF, EAN i taryf CN dla produktów ACME</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <label class="btn" title="Importuj produkty z pliku CSV" style="cursor:pointer">
+        📥 Import CSV
+        <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="importCsv(this)">
+      </label>
+      <button type="button" class="btn btn-primary" onclick="openAddModal()">➕ Dodaj produkt</button>
+    </div>
+  </div>
+
+  <!-- CSV hint -->
+  <div class="import-hint">
+    <strong>Format CSV:</strong> kolumny <code>ref_code</code>, <code>product_name</code>, <code>ean</code>, <code>unit</code>, <code>tariff_cn</code>, <code>description</code>, <code>supplier_codes</code>. Separator: przecinek. Kodowanie: UTF-8.
+  </div>
+
+  <!-- Toolbar: search -->
+  <div class="prod-toolbar">
+    <label for="searchInput" class="sr-only">Szukaj produktów</label>
+    <input type="search" class="prod-search" id="searchInput" placeholder="🔍 Szukaj po REF, nazwie lub EAN…" oninput="onSearch(this.value)" autocomplete="off">
+    <span id="totalBadge" style="font-size:12px;color:var(--muted)"></span>
+  </div>
+
+  <!-- Table -->
+  <div class="prod-table-wrap">
+    <table class="prod-table">
+      <thead>
+        <tr>
+          <th scope="col">REF</th>
+          <th scope="col">Nazwa produktu</th>
+          <th scope="col">EAN</th>
+          <th scope="col">Jedn.</th>
+          <th scope="col">Tariff CN</th>
+          <th scope="col">Dostawcy</th>
+          <th scope="col" style="width:80px">Akcje</th>
+        </tr>
+      </thead>
+      <tbody id="prodBody">
+        <tr><td colspan="7" class="empty-state" style="padding:40px 0">
+          <div style="text-align:center;color:var(--muted)">Ładowanie…</div>
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="prod-pager" id="prodPager">
+    <button type="button" id="prevBtn" onclick="changePage(-1)" disabled>← Poprzednia</button>
+    <span id="pageInfo">Strona 1</span>
+    <button type="button" id="nextBtn" onclick="changePage(1)" disabled>Następna →</button>
+  </div>
+
+</div>
+
+<!-- Add / Edit Modal -->
+<div class="modal-overlay" id="prodModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle">Dodaj produkt</div>
+    <input type="hidden" id="modalPid" value="">
+    <div class="form-grid">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="fRef">Kod REF *</label>
+          <input type="text" id="fRef" placeholder="np. NL753-S-40">
+        </div>
+        <div class="form-group">
+          <label for="fUnit">Jednostka</label>
+          <input type="text" id="fUnit" placeholder="szt" value="szt">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="fName">Nazwa produktu *</label>
+        <input type="text" id="fName" placeholder="np. Rękawice nitrylowe S">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="fEan">EAN</label>
+          <input type="text" id="fEan" placeholder="13-cyfrowy kod EAN">
+        </div>
+        <div class="form-group">
+          <label for="fCn">Tariff CN</label>
+          <input type="text" id="fCn" placeholder="np. 4015110000">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="fSupplierCodes">Kody u dostawców</label>
+        <input type="text" id="fSupplierCodes" placeholder="np. XY123, AB456 (oddzielone przecinkami)">
+      </div>
+      <div class="form-group">
+        <label for="fDesc">Opis</label>
+        <textarea id="fDesc" placeholder="Opcjonalny opis produktu"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" onclick="closeModal()">Anuluj</button>
+      <button type="button" class="btn btn-primary" id="modalSaveBtn" onclick="saveProduct()">Zapisz</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var _page = 1;
+var _q = '';
+var _total = 0;
+var _perPage = 50;
+var _searchTimer = null;
+var _prodItems = [];   // bieżąca strona produktów (edycja po indeksie, bez JSON w onclick)
+{% if role in ['admin', 'superuser', 'manager'] %}var _canDelete = true;{% else %}var _canDelete = false;{% endif %}
+
+function loadProducts(page, q) {
+  var url = '/api/products?page=' + page + (q ? '&q=' + encodeURIComponent(q) : '');
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      _total = d.total || 0;
+      renderTable(d.items || []);
+      updatePager(d.page, d.total);
+      document.getElementById('totalBadge').textContent = _total + ' produktów';
+    })
+    .catch(function(e){ toast('Błąd ładowania: ' + e, 'error'); });
+}
+
+function renderTable(items) {
+  var tbody = document.getElementById('prodBody');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="es-icon">📦</div><h3>Brak produktów</h3><p>Dodaj produkt lub zaimportuj plik CSV.</p></div></td></tr>';
+    return;
+  }
+  _prodItems = items;
+  tbody.innerHTML = items.map(function(p, _i){
+    // Przekazuj indeks, nie wstrzykuj JSON do atrybutu onclick (XSS przez nazwę produktu).
+    var actions = '<button type="button" class="btn btn-sm" onclick="editProductByIdx(' + _i + ')" title="Edytuj">✏️</button>';
+    if (_canDelete) {
+      actions += ' <button type="button" class="btn btn-sm btn-danger" onclick="deleteProduct(' + p.id + ',\'' + escHtml(p.ref_code) + '\')" title="Usuń">🗑</button>';
+    }
+    return '<tr>'
+      + '<td><span class="ref-badge">' + escHtml(p.ref_code) + '</span></td>'
+      + '<td style="max-width:260px">' + escHtml(p.product_name) + '</td>'
+      + '<td><span class="ean-mono">' + escHtml(p.ean || '—') + '</span></td>'
+      + '<td><span class="unit-badge">' + escHtml(p.unit || 'szt') + '</span></td>'
+      + '<td style="font-size:12px;color:var(--muted);font-family:var(--mono)">' + escHtml(p.tariff_cn || '—') + '</td>'
+      + '<td style="font-size:12px;color:var(--muted)">' + escHtml(p.supplier_codes || '—') + '</td>'
+      + '<td style="white-space:nowrap">' + actions + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function updatePager(page, total) {
+  var pages = Math.ceil(total / _perPage) || 1;
+  document.getElementById('pageInfo').textContent = 'Strona ' + page + ' / ' + pages + ' (' + total + ')';
+  document.getElementById('prevBtn').disabled = page <= 1;
+  document.getElementById('nextBtn').disabled = page >= pages;
+}
+
+function changePage(delta) {
+  _page += delta;
+  loadProducts(_page, _q);
+}
+
+function onSearch(val) {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(function(){
+    _q = val.trim();
+    _page = 1;
+    loadProducts(_page, _q);
+  }, 320);
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Modal ──────────────────────────────────────────────────────────────────────
+function openAddModal() {
+  document.getElementById('modalTitle').textContent = 'Dodaj produkt';
+  document.getElementById('modalPid').value = '';
+  document.getElementById('fRef').value = '';
+  document.getElementById('fRef').disabled = false;
+  document.getElementById('fName').value = '';
+  document.getElementById('fUnit').value = 'szt';
+  document.getElementById('fEan').value = '';
+  document.getElementById('fCn').value = '';
+  document.getElementById('fSupplierCodes').value = '';
+  document.getElementById('fDesc').value = '';
+  document.getElementById('prodModal').classList.add('open');
+}
+
+function editProductByIdx(i) {
+  var p = (_prodItems || [])[i];
+  if (p) editProduct(p);
+}
+function editProduct(p) {
+  document.getElementById('modalTitle').textContent = 'Edytuj produkt — ' + p.ref_code;
+  document.getElementById('modalPid').value = p.id;
+  document.getElementById('fRef').value = p.ref_code;
+  document.getElementById('fRef').disabled = true;
+  document.getElementById('fName').value = p.product_name || '';
+  document.getElementById('fUnit').value = p.unit || 'szt';
+  document.getElementById('fEan').value = p.ean || '';
+  document.getElementById('fCn').value = p.tariff_cn || '';
+  document.getElementById('fSupplierCodes').value = p.supplier_codes || '';
+  document.getElementById('fDesc').value = p.description || '';
+  document.getElementById('prodModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('prodModal').classList.remove('open');
+}
+
+document.getElementById('prodModal').addEventListener('click', function(e){
+  if (e.target === this) closeModal();
+});
+
+function saveProduct() {
+  var pid = document.getElementById('modalPid').value;
+  var ref = document.getElementById('fRef').value.trim().toUpperCase();
+  var name = document.getElementById('fName').value.trim();
+  if (!name) { toast('Nazwa produktu jest wymagana', 'warn'); return; }
+
+  var body = {
+    product_name: name,
+    ean: document.getElementById('fEan').value.trim(),
+    unit: document.getElementById('fUnit').value.trim() || 'szt',
+    tariff_cn: document.getElementById('fCn').value.trim(),
+    description: document.getElementById('fDesc').value.trim(),
+    supplier_codes: document.getElementById('fSupplierCodes').value.trim(),
+  };
+
+  var saveBtn = document.getElementById('modalSaveBtn');
+  saveBtn.disabled = true;
+
+  var url, method;
+  if (pid) {
+    url = '/api/products/' + pid;
+    method = 'PUT';
+  } else {
+    if (!ref) { toast('Kod REF jest wymagany', 'warn'); saveBtn.disabled = false; return; }
+    body.ref_code = ref;
+    url = '/api/products';
+    method = 'POST';
+  }
+
+  fetch(url, {
+    method: method,
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    saveBtn.disabled = false;
+    if (d.ok) {
+      toast(pid ? 'Produkt zaktualizowany' : 'Produkt dodany', 'ok');
+      closeModal();
+      loadProducts(_page, _q);
+    } else {
+      toast(d.error || 'Błąd zapisu', 'error');
+    }
+  })
+  .catch(function(e){ saveBtn.disabled = false; toast('Błąd: ' + e, 'error'); });
+}
+
+function deleteProduct(id, ref) {
+  confirmModal('Usunąć produkt ' + ref + '?', function(){
+    fetch('/api/products/' + id, { method: 'DELETE' })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.ok) { toast('Produkt usunięty', 'ok'); loadProducts(_page, _q); }
+        else toast(d.error || 'Błąd usuwania', 'error');
+      })
+      .catch(function(e){ toast('Błąd: ' + e, 'error'); });
+  }, { title: 'Usuń produkt', danger: true, okLabel: 'Usuń' });
+}
+
+function importCsv(input) {
+  if (!input.files.length) return;
+  var fd = new FormData();
+  fd.append('file', input.files[0]);
+  input.value = '';
+  toast('Importowanie CSV…', 'info');
+  fetch('/api/products/import', { method: 'POST', body: fd })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.ok) {
+        toast('Zaimportowano ' + d.imported + ' produktów (pominięto: ' + d.skipped + ')', 'ok', 6000);
+        loadProducts(1, _q);
+      } else {
+        toast(d.error || 'Błąd importu', 'error');
+      }
+    })
+    .catch(function(e){ toast('Błąd: ' + e, 'error'); });
+}
+
+// Initial load
+loadProducts(1, '');
+</script>
+{% endblock %}

@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block title %}Zgłoszenia — DocCompare{% endblock %}
+
+{% block extra_head %}
+<style>
+/* Status chips */
+.chip { display:inline-block; padding:2px 9px; border-radius:20px;
+  font-size:11px; font-weight:600; }
+.chip-nowe      { background:#dbeafe; color:#1d4ed8; }
+.chip-w_toku    { background:#fef3c7; color:#d97706; }
+.chip-rozwiązane{ background:#d1fae5; color:#059669; }
+.chip-zamknięte { background:#f3f4f6; color:#6b7280; }
+
+/* Category chips */
+.cat { display:inline-block; padding:2px 8px; border-radius:4px;
+  font-size:11px; font-weight:500; }
+.cat-niezgodność{ background:#fee2e2; color:#dc2626; }
+.cat-sugestia   { background:#e0e7ff; color:#4338ca; }
+.cat-błąd       { background:#fef3c7; color:#d97706; }
+.cat-inne       { background:#f3f4f6; color:#6b7280; }
+.cat-rozbieznosc{ background:#fee2e2; color:#dc2626; }
+
+/* Priority chips */
+.prio { display:inline-block; padding:2px 8px; border-radius:4px;
+  font-size:11px; font-weight:600; }
+.prio-low      { background:#f3f4f6; color:#6b7280; }
+.prio-normal   { background:#dbeafe; color:#1d4ed8; }
+.prio-high     { background:#ffedd5; color:#ea580c; }
+.prio-critical { background:#fee2e2; color:#dc2626; }
+
+/* Cards */
+.ticket-card {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:16px 20px;
+  margin-bottom:12px;
+  transition:box-shadow .15s;
+}
+.ticket-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+.ticket-card-header { display:flex; align-items:flex-start; gap:12px; }
+.ticket-card-meta { flex:1; min-width:0; }
+.ticket-title { font-size:14px; font-weight:600; color:var(--text); margin-bottom:4px; }
+.ticket-info  { font-size:12px; color:var(--muted); display:flex; gap:10px; flex-wrap:wrap; }
+.ticket-desc  { margin-top:10px; font-size:13px; color:#374151; line-height:1.6;
+  background:var(--surface2); padding:10px 14px; border-radius:6px;
+  border-left:3px solid var(--border); }
+.ticket-response { margin-top:10px; font-size:13px; color:#374151; line-height:1.6;
+  background:#f0fdf4; padding:10px 14px; border-radius:6px;
+  border-left:3px solid #059669; }
+.ticket-response-label { font-size:11px; font-weight:700; color:#059669; margin-bottom:4px; }
+
+/* Admin panel */
+.admin-panel { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); }
+.admin-panel-title { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase;
+  letter-spacing:.5px; margin-bottom:10px; }
+.admin-row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
+.form-group { display:flex; flex-direction:column; gap:4px; }
+.form-label { font-size:11px; font-weight:600; color:var(--muted); }
+.form-select, .form-textarea {
+  border:1px solid var(--border); border-radius:6px;
+  padding:6px 10px; font-size:13px; background:var(--surface);
+  color:var(--text); font-family:inherit;
+}
+.form-select:focus, .form-textarea:focus {
+  outline:none; border-color:var(--accent);
+  box-shadow:0 0 0 2px rgba(29,78,216,.15);
+}
+.form-textarea { resize:vertical; min-height:60px; width:320px; }
+
+/* New ticket form */
+.form-card {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:20px 24px;
+  margin-bottom:28px;
+}
+.form-card-title { font-size:15px; font-weight:700; margin-bottom:16px; }
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.form-full { grid-column:1/-1; }
+.form-input {
+  width:100%; border:1px solid var(--border); border-radius:6px;
+  padding:8px 12px; font-size:13px; background:var(--surface);
+  color:var(--text); font-family:inherit;
+}
+.form-input:focus { outline:none; border-color:var(--accent);
+  box-shadow:0 0 0 2px rgba(29,78,216,.15); }
+.form-textarea-full { width:100%; resize:vertical; min-height:80px; }
+
+.empty-state { text-align:center; padding:60px 20px; color:var(--ink-3); }
+.empty-state-icon { font-size:48px; margin-bottom:12px; }
+
+
+.tabs { display:flex; gap:4px; margin-bottom:20px; }
+.tab { padding:6px 16px; border-radius:6px; font-size:13px; font-weight:600;
+  cursor:pointer; border:1px solid var(--border); background:var(--surface);
+  color:var(--muted); transition:all .15s; }
+.tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+</style>
+{% endblock %}
+
+{% block page_title %}Zgłoszenia{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>📬 Zgłoszenia</h1>
+    <p class="sub">
+      {% if role in ['admin','superuser','manager'] %}Wszystkie zgłoszenia użytkowników
+      {% else %}Twoje zgłoszenia i sugestie{% endif %}
+    </p>
+  </div>
+</div>
+
+<!-- NOWE ZGŁOSZENIE -->
+<div class="form-card" id="newTicketForm" x-data="{open:false}" x-cloak>
+  <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer"
+       @click="open=!open">
+    <div class="form-card-title" style="margin-bottom:0">➕ Nowe zgłoszenie</div>
+    <span style="color:var(--muted);font-size:18px" x-text="open?'▲':'▼'">▼</span>
+  </div>
+  <div x-show="open" x-transition style="margin-top:16px">
+    <div class="form-grid" id="ticketFormFields">
+      <div class="form-group">
+        <label for="ticketTitle" class="form-label">Tytuł *</label>
+        <input id="ticketTitle" type="text" class="form-input" maxlength="200"
+               placeholder="Krótki opis problemu lub sugestii" aria-required="true">
+      </div>
+      <div class="form-group">
+        <label for="ticketCategory" class="form-label">Kategoria</label>
+        <select id="ticketCategory" class="form-input">
+          <option value="niezgodność">🔴 Niezgodność w dokumencie</option>
+          <option value="błąd">🟡 Błąd aplikacji</option>
+          <option value="sugestia">🔵 Sugestia ulepszenia</option>
+          <option value="inne">⚪ Inne</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="ticketPriority" class="form-label">Priorytet</label>
+        <select id="ticketPriority" class="form-input">
+          <option value="low">⬇ Niski</option>
+          <option value="normal" selected>➡ Normalny</option>
+          <option value="high">⬆ Wysoki</option>
+          <option value="critical">🔥 Krytyczny</option>
+        </select>
+      </div>
+      <div class="form-group form-full">
+        <label for="ticketDesc" class="form-label">Opis *</label>
+        <textarea id="ticketDesc" class="form-input form-textarea-full"
+                  maxlength="2000" aria-required="true"
+                  placeholder="Opisz dokładnie: co się stało, w którym miejscu aplikacji, jakie pliki były użyte, jaki jest oczekiwany wynik..."></textarea>
+      </div>
+      <div style="grid-column:1/-1">
+        <button type="button" class="btn btn-primary" onclick="submitTicket()">Wyślij zgłoszenie</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FILTRY (dla managerów) -->
+{% if role in ['admin','superuser','manager'] %}
+<div class="tabs" id="statusFilter">
+  <div class="tab active" data-status="all" onclick="filterTickets('all',this)">Wszystkie</div>
+  <div class="tab" data-status="nowe" onclick="filterTickets('nowe',this)">🆕 Nowe</div>
+  <div class="tab" data-status="w_toku" onclick="filterTickets('w_toku',this)">⏳ W toku</div>
+  <div class="tab" data-status="rozwiązane" onclick="filterTickets('rozwiązane',this)">✅ Rozwiązane</div>
+  <div class="tab" data-status="zamknięte" onclick="filterTickets('zamknięte',this)">🔒 Zamknięte</div>
+</div>
+{% endif %}
+
+<!-- LISTA ZGŁOSZEŃ -->
+<div id="ticketsList">
+{% if tickets %}
+  {% for t in tickets %}
+  <div class="ticket-card" data-status="{{ t.status }}" data-id="{{ t.id }}">
+    <div class="ticket-card-header">
+      <div class="ticket-card-meta">
+        <div class="ticket-title">{{ t.title }}</div>
+        <div class="ticket-info">
+          <span class="chip chip-{{ t.status }}">{{ t.status }}</span>
+          <span class="cat cat-{{ t.category }}">{{ t.category }}</span>
+          {% if t.get('priority') and t.priority != 'normal' %}
+          <span class="prio prio-{{ t.priority }}">
+            {% if t.priority == 'low' %}⬇ niski{% elif t.priority == 'high' %}⬆ wysoki{% elif t.priority == 'critical' %}🔥 krytyczny{% else %}{{ t.priority }}{% endif %}
+          </span>
+          {% endif %}
+          {% if role in ['admin','superuser','manager'] %}
+          <span>👤 {{ t.username }}</span>
+          {% endif %}
+          <span>🕒 {{ t.created_at[:16] if t.created_at else '' }}</span>
+          {% if t.resolved_by %}
+          <span>✅ {{ t.resolved_by }}</span>
+          {% endif %}
+          {% if t.get('comparison_id') %}
+          <a href="/history#c{{ t.comparison_id }}" style="color:var(--accent);font-size:12px;font-weight:500" title="Powiązane porównanie">
+            🔗 {{ t.comp_doc_type or 'Porównanie' }}{% if t.comp_po_number %} — {{ t.comp_po_number }}{% endif %}
+          </a>
+          {% endif %}
+        </div>
+      </div>
+      <div style="font-size:22px;opacity:.4">#{{ t.id }}</div>
+    </div>
+    <div class="ticket-desc">{{ t.description }}</div>
+    {% if t.admin_response %}
+    <div class="ticket-response">
+      <div class="ticket-response-label">Odpowiedź administracji</div>
+      {{ t.admin_response }}
+    </div>
+    {% endif %}
+
+    {% if role in ['admin','superuser','manager'] %}
+    <div class="admin-panel">
+      <div class="admin-panel-title">Zarządzaj zgłoszeniem</div>
+      <div class="admin-row">
+        <div class="form-group">
+          <label for="status_{{ t.id }}" class="form-label">Status</label>
+          <select class="form-select" id="status_{{ t.id }}">
+            <option value="nowe" {% if t.status=='nowe' %}selected{% endif %}>🆕 Nowe</option>
+            <option value="w_toku" {% if t.status=='w_toku' %}selected{% endif %}>⏳ W toku</option>
+            <option value="rozwiązane" {% if t.status=='rozwiązane' %}selected{% endif %}>✅ Rozwiązane</option>
+            <option value="zamknięte" {% if t.status=='zamknięte' %}selected{% endif %}>🔒 Zamknięte</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="response_{{ t.id }}" class="form-label">Odpowiedź</label>
+          <textarea class="form-textarea" id="response_{{ t.id }}"
+                    placeholder="Opcjonalna odpowiedź dla użytkownika...">{{ t.admin_response or '' }}</textarea>
+        </div>
+        <div class="form-group" style="justify-content:flex-end">
+          <button type="button" class="btn btn-primary btn-sm" onclick="updateTicket({{ t.id }})">Zapisz</button>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">📭</div>
+    <div style="font-size:16px;font-weight:600;margin-bottom:6px">Brak zgłoszeń</div>
+    <div style="font-size:13px">Użyj formularza powyżej, aby zgłosić problem lub sugestię.</div>
+  </div>
+{% endif %}
+</div>
+
+<script>
+async function submitTicket() {
+  const title    = document.getElementById('ticketTitle').value.trim();
+  const desc     = document.getElementById('ticketDesc').value.trim();
+  const cat      = document.getElementById('ticketCategory').value;
+  const priority = document.getElementById('ticketPriority').value;
+  if (!title || !desc) { toast('Wypełnij tytuł i opis', 'error'); return; }
+  const r = await fetch('/api/tickets', {
+    method:'POST',
+    headers:{'Content-Type':'application/json', 'X-CSRF-Token': getCsrf()},
+    body: JSON.stringify({title, description:desc, category:cat, priority})
+  });
+  const d = await r.json();
+  if (d.ok) {
+    toast('Zgłoszenie wysłane!', 'ok');
+    setTimeout(() => location.reload(), 1200);
+  } else {
+    toast(d.error || 'Błąd', 'error');
+  }
+}
+
+async function updateTicket(id) {
+  const status = document.getElementById('status_'+id).value;
+  const resp   = document.getElementById('response_'+id).value.trim();
+  const r = await fetch('/api/tickets/'+id, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json', 'X-CSRF-Token': getCsrf()},
+    body: JSON.stringify({status, admin_response:resp})
+  });
+  const d = await r.json();
+  if (d.ok) {
+    toast('Zgłoszenie zaktualizowane!', 'ok');
+    setTimeout(() => location.reload(), 1000);
+  } else {
+    toast(d.error || 'Błąd', 'error');
+  }
+}
+
+function filterTickets(status, el) {
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.ticket-card').forEach(c => {
+    if (status === 'all' || c.dataset.status === status) {
+      c.style.display = '';
+    } else {
+      c.style.display = 'none';
+    }
+  });
+}
+</script>
+{% endblock %}
