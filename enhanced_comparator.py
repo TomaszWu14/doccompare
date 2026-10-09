@@ -482,7 +482,12 @@ def _parse_document_tables(tables: list[dict],
 
     for tbl in tables:
         df = tbl.get("dataframe")
-        if df is None or not hasattr(df, "iloc"):
+        if df is None:
+            continue
+        if not hasattr(df, "iloc"):
+            # Bez pandas pdf_extractor oddaje list[list] — pominięcie musi być widoczne (#1).
+            logger.warning("Pominięto tabelę (str. %s, %s): to nie DataFrame — brak pandas?",
+                           tbl.get("page"), tbl.get("method"))
             continue
         if df.shape[0] < 2 or df.shape[1] < 3:
             continue
