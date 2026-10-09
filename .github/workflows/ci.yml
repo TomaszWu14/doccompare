@@ -42,8 +42,9 @@ jobs:
       - name: Instalacja zależności testowych
         # Lekki zestaw — testy obejmują wyłącznie czyste funkcje i nie wymagają
         # ciężkich zależności ML (torch / paddleocr / transformers) z requirements.txt,
-        # dzięki czemu CI kończy się w kilka sekund.
-        run: pip install pytest python-dateutil dateparser babel flask werkzeug pydantic pypdf reportlab pdfplumber rapidfuzz numpy
+        # dzięki czemu CI kończy się w kilka sekund. pandas jest wymagany: bez niego
+        # ekstrakcja pozycji z tabel po cichu zwraca 0 pozycji (#1).
+        run: pip install pytest python-dateutil dateparser babel flask werkzeug pydantic pypdf reportlab pdfplumber rapidfuzz numpy "pandas>=2.0"
 
       - name: Uruchomienie testów
         run: python -m pytest tests/ -q
